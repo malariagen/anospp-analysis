@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "anospp-analysis"
+version = "0.1.0"
+description = "ANOSPP data analysis"
+authors = ["Alex Makunin <am60@sanger.ac.uk>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "anospp_analysis"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pandas = "*"
+numpy = "*"
+seaborn = "*"
+BioPython = "*"
+
+[tool.poetry.group.dev.dependencies]
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
