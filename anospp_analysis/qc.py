@@ -12,15 +12,13 @@ import os
 
 TARGETS = [str(i) for i in range(62)] + ['P1','P2']
 CUTADAPT_TARGETS = TARGETS + ['unknown']
-WELL_IDS = [r + str(c) for (r,c) in itertools.product(list('ABCDEFGH', range(1,13)))]
-LIMS_WELL_IDS = [r + str(c) for (r,c) in itertools.product(list('ABCDEFGHIJKLMNOP', range(1,25)))]
 
 def well_id_mapper():
     '''
     Yields mapping of tag_index 1,2...96 
     to well id A1,B1...H12.
     N.B. subsequent plates can be mapped using
-    (tag_index - 1) % 96 + 1 
+    tag_index % 96
     '''
 
     well_ids = dict()
@@ -29,6 +27,9 @@ def well_id_mapper():
         for row in 'ABCDEFGH':
             well_ids[tag] = f'{row}{col}'
             tag += 1
+
+    # edge case
+    well_ids[0] = 'H12'
             
     return well_ids
 
@@ -40,7 +41,7 @@ def lims_well_id_mapper():
     1 2
     3 4
     N.B. subsequent plates can be mapped using
-    (tag_index - 1) % 384 + 1 
+    tag_index % 384
     '''
     lims_well_ids = dict()
     tag = 1
@@ -64,6 +65,10 @@ def lims_well_id_mapper():
         for row in 'BDFHJLNP':
             lims_well_ids[tag] = f'{row}{col * 2}'
             tag += 1
+
+    # edge case
+    lims_well_ids[0] = 'P24'
+
     return lims_well_ids
 
 def prep_hap(hap_fn):
@@ -88,6 +93,7 @@ def prep_samples(samples_fn):
     '''
 
     # temp - allow reading from tsv or csv
+    # TODO converge to tsv
     if str(samples_fn).endswith('csv'):
         samples_df = pd.read_csv(samples_fn, sep=',')
     elif str(samples_fn).endswith('tsv'):
@@ -104,7 +110,32 @@ def prep_samples(samples_fn):
         'Replicate':'replicate_id'
         }), 
     inplace=True)
+    
     samples_df.set_index('sample_id', inplace=True)
+
+    # plate ids
+    if 'plate_id' in samples_df.columns:
+        samples_df['plate_id'] = samples_df.plate_id
+    else:
+        samples_df['plate_id'] = samples_df.apply(lambda r: f'p_{r.run_id}_{(r.tag_index - 1) // 96 + 1}',
+            axis=1)
+    if 'well_id' in samples_df.columns:
+        samples_df['well_id'] = samples_df.well_id
+    else:
+        samples_df['well_id'] = (samples_df.tag_index % 96).replace(well_id_mapper())
+    assert ~samples_df.plate_id.isna().any(), 'Could not infer plate_id for all samples'
+    assert ~samples_df.well_id.isna().any(), 'Could not infer well_id for all samples'
+    assert samples_df.well_id.isin(well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
+    # lims plate ids
+    if samples_df.id_library_lims.str.contains(':').all():
+        samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(':',n=1,expand=True)
+    else:
+        samples_df['lims_plate_id'] = samples_df.apply(lambda r: f'lp_{r.run_id}_{(r.tag_index - 1) // 384 + 1}',
+            axis=1)
+        samples_df['lims_well_id'] = (samples_df.tag_index % 384).replace(lims_well_id_mapper())
+    assert ~samples_df.lims_plate_id.isna().any(), 'Could not infer plate_id for all samples'
+    assert ~samples_df.lims_well_id.isna().any(), 'Could not infer well_id for all samples'
+    assert samples_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
 
     return samples_df
 
@@ -131,27 +162,12 @@ def combine_stats(stats_df, hap_df, samples_df):
     # targets per sample - assume same samples as in haplotypes
     stats_df['targets_recovered'] = hap_df.groupby('sample_id').target.nunique().fillna(0)
     # assert ~stats_df.targets_recovered.isna().any(), 'Could not calculate targets_recovered for all samples'
-    # plate ids
-    if 'plate_id' in samples_df.columns:
-        stats_df['plate_id'] = samples_df.plate_id
-        assert ~stats_df.plate_id.isna().any(), 'Could not infer plate_id for all samples'
-    else:
-        stats_df['plate_id'] = samples_df.apply(lambda r: f'p_{r.run_id}_{(r.tag_index - 1) // 96 + 1}',
-            axis=1)
-    if 'well_id' in samples_df.columns:
-        stats_df['well_id'] = samples_df.well_id
-    else:
-        stats_df['well_id'] = samples_df
-    assert ~stats_df.well_id.isna().any(), 'Could not infer well_id for all samples'
-    assert stats_df.well_id.isin(WELL_IDS).all(), 'Found well_id outside A1...H12'
-    # lims plate ids
-    if samples_df.id_library_lims.str.contains(':').all():
-        pass
+    
 
     # batch ids
     # stats_df['batch_id'] = samples_df.batch_id
     # assert ~stats_df.plate_id.isna().any(), 'Could not infer plate_id for all samples'
-    # # final reads logscale
+    # # final reads logscale, placeholder value for zero - -1
     # stats_df['final_reads_log10'] = stats_df.nonchim.replace(0,0.1).apply(lambda x: np.log10(x))
     # # filter rate 
     # stats_df['filter_rate'] = stats_df.denoised / stats_df.DADA2_input
