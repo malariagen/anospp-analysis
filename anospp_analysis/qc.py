@@ -2,177 +2,23 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-import glob
-import itertools
-import logging
 from Bio import SeqIO
+from collections import OrderedDict
 import sys
-import argparse
 import os
+import argparse
 
-TARGETS = [str(i) for i in range(62)] + ['P1','P2']
-CUTADAPT_TARGETS = TARGETS + ['unknown']
+from utils import *
 
-def well_id_mapper():
-    '''
-    Yields mapping of tag_index 1,2...96 
-    to well id A1,B1...H12.
-    N.B. subsequent plates can be mapped using
-    tag_index % 96
-    '''
+DADA2_COLS = OrderedDict([
+    ('input','removed by filterAndTrim'), 
+    ('filtered','removed by denoising'),
+    ('denoised','removed by merging'), 
+    ('merged','removde by rmchimera'), 
+    ('nonchim','removed by post-filtering'),
+    ('final','retained') 
 
-    well_ids = dict()
-    tag = 1
-    for col in range(1,13):
-        for row in 'ABCDEFGH':
-            well_ids[tag] = f'{row}{col}'
-            tag += 1
-
-    # edge case
-    well_ids[0] = 'H12'
-            
-    return well_ids
-
-def lims_well_id_mapper():
-    '''
-    Yields mapping of tag_index 1,2...384 
-    to well id A1,C1...P24
-    4 96-well plates order in quadrants is
-    1 2
-    3 4
-    N.B. subsequent plates can be mapped using
-    tag_index % 384
-    '''
-    lims_well_ids = dict()
-    tag = 1
-    # upper left quadrant
-    for col in range(1,13):
-        for row in 'ACEGIKMO':
-            lims_well_ids[tag] = f'{row}{col * 2 - 1}'
-            tag += 1
-    # upper right quadrant
-    for col in range(1,13):
-        for row in 'ACEGIKMO':
-            lims_well_ids[tag] = f'{row}{col * 2}'
-            tag += 1
-    # lower left quadrant
-    for col in range(1,13):
-        for row in 'BDFHJLNP':
-            lims_well_ids[tag] = f'{row}{col * 2 - 1}'
-            tag += 1
-    # lower right quadrant
-    for col in range(1,13):
-        for row in 'BDFHJLNP':
-            lims_well_ids[tag] = f'{row}{col * 2}'
-            tag += 1
-
-    # edge case
-    lims_well_ids[0] = 'P24'
-
-    return lims_well_ids
-
-def prep_hap(hap_fn):
-    '''
-    load haplotypes table
-    '''
-
-    hap_df = pd.read_csv(hap_fn, sep='\t')
-
-    # compatibility with old style haplotype column names
-    hap_df.rename(columns=({
-        's_Sample':'sample_id',
-        'frac_reads':'reads_fraction'
-        }), 
-    inplace=True)
-
-    return hap_df
-
-def prep_samples(samples_fn):
-    '''
-    load sample manifest used for anospp pipeline
-    '''
-
-    # temp - allow reading from tsv or csv
-    # TODO converge to tsv
-    if str(samples_fn).endswith('csv'):
-        samples_df = pd.read_csv(samples_fn, sep=',')
-    elif str(samples_fn).endswith('tsv'):
-        samples_df = pd.read_csv(samples_fn, sep='\t')
-    else:
-        raise ValueError(f'Expected {samples_fn} to be in either tsv or csv format')
-
-    # compatibility with old style samples column names
-    samples_df.rename(columns=({
-        'Source_sample':'sample_id',
-        'Run':'run_id',
-        'Lane':'lane_index',
-        'Tag':'tag_index',
-        'Replicate':'replicate_id'
-        }), 
-    inplace=True)
-    
-    samples_df.set_index('sample_id', inplace=True)
-
-    # plate ids
-    if 'plate_id' in samples_df.columns:
-        samples_df['plate_id'] = samples_df.plate_id
-    else:
-        samples_df['plate_id'] = samples_df.apply(lambda r: f'p_{r.run_id}_{(r.tag_index - 1) // 96 + 1}',
-            axis=1)
-    if 'well_id' in samples_df.columns:
-        samples_df['well_id'] = samples_df.well_id
-    else:
-        samples_df['well_id'] = (samples_df.tag_index % 96).replace(well_id_mapper())
-    assert ~samples_df.plate_id.isna().any(), 'Could not infer plate_id for all samples'
-    assert ~samples_df.well_id.isna().any(), 'Could not infer well_id for all samples'
-    assert samples_df.well_id.isin(well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
-    # lims plate ids
-    if samples_df.id_library_lims.str.contains(':').all():
-        samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(':',n=1,expand=True)
-    else:
-        samples_df['lims_plate_id'] = samples_df.apply(lambda r: f'lp_{r.run_id}_{(r.tag_index - 1) // 384 + 1}',
-            axis=1)
-        samples_df['lims_well_id'] = (samples_df.tag_index % 384).replace(lims_well_id_mapper())
-    assert ~samples_df.lims_plate_id.isna().any(), 'Could not infer plate_id for all samples'
-    assert ~samples_df.lims_well_id.isna().any(), 'Could not infer well_id for all samples'
-    assert samples_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
-
-    return samples_df
-
-def prep_stats(stats_fn):
-    '''
-    load DADA2 stats table
-    '''
-
-    stats_df = pd.read_csv(stats_fn, sep='\t', index_col=0)
-    # compatibility with old style samples column names
-    stats_df.rename(columns={
-        's_Sample':'sample_id'
-    },
-    inplace=True)
-    # denoising happens for F and R reads independently, we take minimum of those 
-    # as an estimate for retained read count
-    stats_df['denoised'] = stats_df[['denoisedF','denoisedR']].min(axis=1)
-    
-    return stats_df
-
-def combine_stats(stats_df, hap_df, samples_df):
-    # # fix samples order
-    # stats_df = stats_df.reindex(samples_df['sample_id'])
-    # targets per sample - assume same samples as in haplotypes
-    stats_df['targets_recovered'] = hap_df.groupby('sample_id').target.nunique().fillna(0)
-    # assert ~stats_df.targets_recovered.isna().any(), 'Could not calculate targets_recovered for all samples'
-    
-
-    # batch ids
-    # stats_df['batch_id'] = samples_df.batch_id
-    # assert ~stats_df.plate_id.isna().any(), 'Could not infer plate_id for all samples'
-    # # final reads logscale, placeholder value for zero - -1
-    # stats_df['final_reads_log10'] = stats_df.nonchim.replace(0,0.1).apply(lambda x: np.log10(x))
-    # # filter rate 
-    # stats_df['filter_rate'] = stats_df.denoised / stats_df.DADA2_input
-
-    return stats_df
+])
 
 def plot_target_balance(hap_df):
     '''
@@ -180,12 +26,14 @@ def plot_target_balance(hap_df):
     '''
     reads_per_sample = hap_df.groupby(['sample_id','target'])['reads'].sum().reset_index()
     # logscale, remove zeroes
-    reads_per_sample['log10_reads'] = np.log10(reads_per_sample.reads.replace(0,np.nan))
+    reads_per_sample['log10_reads'] = reads_per_sample.reads.replace(0,np.nan).apply(lambda x: np.log10(x))
     fig, ax = plt.subplots(1, 1, figsize=(20,4))
     sns.stripplot(data=reads_per_sample,
         x = 'target', y = 'log10_reads', hue = 'target', 
         alpha = .1, jitter = .3,
         ax = ax)
+    ax.set_ylabel('reads (log10)')
+    ax.set_xlabel('target')
     return fig, ax
 
 def plot_allele_balance(hap_df):
@@ -202,28 +50,94 @@ def plot_allele_balance(hap_df):
     
     return het_plot
 
+def plot_sample_filtering(sample_stats_df, samples_df, dada2_cols=DADA2_COLS):
+    '''
+    Per-sample DADA2 filtering barplot
+    '''
+    # TODO sum stats across targets and log10 transform
+
+    plates = samples_df.plate_id.unique()
+    nplates = len(plates)
+    fig, axs = plt.subplots(nplates,1,figsize=(20, 4 * nplates))
+    for plate, ax in zip(plates, axs):
+        plate_samples = samples_df.loc[samples_df.plate_id == plate, 'sample_id']
+        plot_df = sample_stats_df[sample_stats_df['sample_id'].isin(plate_samples)]
+        for i, col in enumerate(dada2_cols.keys()):
+            sns.barplot(x='sample_id',  y=f'{col}_log10', data=plot_df, 
+                        color=sns.color_palette()[i], ax=ax, label=dada2_cols[col])
+        ax.set_xlabel('sample_id')
+        ax.tick_params(axis='x', rotation=90)
+        ax.set_ylabel('reads (log10)')
+        ax.legend(loc='upper left')
+    plt.tight_layout()
+
+    return fig, axs
+
+def plot_plate_stats(comb_stats_df):
+    fig, axs = plt.subplots(3,1, figsize=(10,15))
+    sns.stripplot(data=comb_stats_df,
+                y='final_log10',
+                x='plate_id',
+                hue='plate_id',
+                alpha=.3,
+                jitter=.35,
+                ax=axs[0])
+    # 1000 reads cutoff
+    axs[0].axhline(3, c='silver')
+    axs[0].set_xticklabels([])
+    sns.stripplot(data=comb_stats_df,
+                y='targets_recovered',
+                x='plate_id',
+                hue='plate_id',
+                alpha=.3,
+                jitter=.35,
+                ax=axs[1])
+    # 30 targets cutoff
+    axs[1].axhline(30, c='silver')
+    axs[1].set_xticklabels([])
+    sns.stripplot(data=comb_stats_df,
+                y='filter_rate',
+                x='plate_id',
+                hue='plate_id',
+                alpha=.3,
+                jitter=.35,
+                ax=axs[2])
+    # 50% filtering cutoff
+    axs[2].axhline(.5, c='silver')
+    for ax in axs:
+        ax.get_legend().remove()
+    plt.xticks(rotation=90)
+
+    return fig, axs
+
 def qc(args):
 
     os.makedirs(args.outdir, exist_ok = True)
     
     hap_df = prep_hap(args.haplotypes)
 
-    # fig, ax = plot_target_balance(hap_df)
-    # fig.savefig(f'{args.outdir}/target_balance.png')
+    target_balance_fig, _ = plot_target_balance(hap_df)
+    target_balance_fig.savefig(f'{args.outdir}/target_balance.png')
 
-    # het_plot = plot_allele_balance(hap_df)
-    # het_plot.savefig(f'{args.outdir}/allele_balance.png')
+    het_plot = plot_allele_balance(hap_df)
+    het_plot.savefig(f'{args.outdir}/allele_balance.png')
 
     samples_df = prep_samples(args.samples)
     stats_df = prep_stats(args.stats)
 
-    comb_df = combine_stats(stats_df, hap_df, samples_df)
+    # sample_filtering_fig, _ = plot_sample_filtering(stats_df, samples_df)
+    # sample_filtering_fig.savefig(f'{args.outdir}/filter_per_sample.png')
+
+    comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
+
+    plate_stats_fig, _ = plot_plate_stats(comb_stats_df)
+    plate_stats_fig.savefig(f'{args.outdir}/plate_stats.png')
 
 def main(cmd):
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
-    parser.add_argument('--haplotypes', help='Haplotypes tsv file') #, type=argparse.FileType('r'))
-    parser.add_argument('--samples', help='Samples tsv file') #, type=argparse.FileType('r'))
-    parser.add_argument('--stats', help='DADA2 stats tsv file') #, type=argparse.FileType('r'))
+    parser.add_argument('--haplotypes', help='Haplotypes tsv file')
+    parser.add_argument('--samples', help='Samples tsv file')
+    parser.add_argument('--stats', help='DADA2 stats tsv file')
     parser.add_argument('--outdir', help='Output directory', default='qc')
 
     args = parser.parse_args(cmd)
