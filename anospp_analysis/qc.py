@@ -79,15 +79,16 @@ def plot_sample_filtering(sample_stats_df, samples_df, dada2_cols=DADA2_COLS):
 
     return fig, axs
 
-def plot_plate_stats(comb_stats_df):
+def plot_plate_stats(comb_stats_df, lims_plate=False):
 
     logging.info('plotting plate stats')
-    
+    plate_col = 'lims_plate_id' if lims_plate else 'plate_id'
+
     fig, axs = plt.subplots(3,1, figsize=(10,15))
     sns.stripplot(data=comb_stats_df,
                 y='final_log10',
-                x='plate_id',
-                hue='plate_id',
+                x=plate_col,
+                hue=plate_col,
                 alpha=.3,
                 jitter=.35,
                 ax=axs[0])
@@ -96,8 +97,8 @@ def plot_plate_stats(comb_stats_df):
     axs[0].set_xticklabels([])
     sns.stripplot(data=comb_stats_df,
                 y='targets_recovered',
-                x='plate_id',
-                hue='plate_id',
+                x=plate_col,
+                hue=plate_col,
                 alpha=.3,
                 jitter=.35,
                 ax=axs[1])
@@ -106,8 +107,8 @@ def plot_plate_stats(comb_stats_df):
     axs[1].set_xticklabels([])
     sns.stripplot(data=comb_stats_df,
                 y='filter_rate',
-                x='plate_id',
-                hue='plate_id',
+                x=plate_col,
+                hue=plate_col,
                 alpha=.3,
                 jitter=.35,
                 ax=axs[2])
@@ -118,9 +119,10 @@ def plot_plate_stats(comb_stats_df):
     plt.xticks(rotation=90)
 
     return fig, axs
-def plot_plate_summaries(comb_stats_df, plate_col='plate_id'):
+def plot_plate_summaries(comb_stats_df, lims_plate=False):
 
     logging.info(f'plotting success summaries by {plate_col}')
+    plate_col = 'lims_plate_id' if lims_plate else 'plate_id'
 
     # success rate definition
     comb_stats_df['over 1000 final reads'] = comb_stats_df.denoised > 1000
@@ -136,6 +138,7 @@ def plot_plate_summaries(comb_stats_df, plate_col='plate_id'):
 
     fig, ax = plt.subplots(1,1,figsize=(nplates * 0.8,3))
     sns.heatmap(sum_df.T, annot=True, ax=ax, vmax=1, vmin=0)
+    plt.tight_layout()
 
     return fig, ax
 
@@ -145,29 +148,30 @@ def qc(args):
     logging.info('ANOSPP data QC started')
     os.makedirs(args.outdir, exist_ok = True)
     
+    logging.info('ANOSPP QC data import started')
     hap_df = prep_hap(args.haplotypes)
+    samples_df = prep_samples(args.samples)
+    stats_df = prep_stats(args.stats)
 
+    comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
+
+    logging.info('ANOSPP QC plotting started')
     target_balance_fig, _ = plot_target_balance(hap_df)
     target_balance_fig.savefig(f'{args.outdir}/target_balance.png')
 
     het_plot = plot_allele_balance(hap_df)
     het_plot.savefig(f'{args.outdir}/allele_balance.png')
 
-    samples_df = prep_samples(args.samples)
-    stats_df = prep_stats(args.stats)
-
     # sample_filtering_fig, _ = plot_sample_filtering(stats_df, samples_df)
     # sample_filtering_fig.savefig(f'{args.outdir}/filter_per_sample.png')
 
-    comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-
-    plate_stats_fig, _ = plot_plate_stats(comb_stats_df)
+    plate_stats_fig, _ = plot_plate_stats(comb_stats_df, lims_plate=False)
     plate_stats_fig.savefig(f'{args.outdir}/plate_stats.png')
 
-    plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, plate_col='plate_id')
+    plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, lims_plate=False)
     plate_summaries_fig.savefig(f'{args.outdir}/plate_summaries.png')
 
-    lims_plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, plate_col='lims_plate_id')
+    lims_plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, lims_plate=True)
     lims_plate_summaries_fig.savefig(f'{args.outdir}/lims_plate_summaries.png')
 
     logging.info('ANOSPP data QC ended')
