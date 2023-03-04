@@ -118,6 +118,26 @@ def plot_plate_stats(comb_stats_df):
     plt.xticks(rotation=90)
 
     return fig, axs
+def plot_plate_summaries(comb_stats_df, plate_col='plate_id'):
+
+    logging.info(f'plotting success summaries by {plate_col}')
+
+    # success rate definition
+    comb_stats_df['over 1000 final reads'] = comb_stats_df.denoised > 1000
+    comb_stats_df['over 30 targets'] = comb_stats_df.targets_recovered > 30
+    comb_stats_df['over 50% reads retained'] = comb_stats_df.filter_rate > .5
+
+    plates = comb_stats_df[plate_col].unique()
+    nplates = comb_stats_df[plate_col].nunique()
+
+    sum_df = comb_stats_df.groupby(plate_col)[['over 1000 final reads', 'over 30 targets','over 50% reads retained']].sum()
+    y = comb_stats_df.groupby(plate_col)['over 1000 final reads'].count()
+    sum_df = sum_df.divide(y, axis=0).reindex(plates)
+
+    fig, ax = plt.subplots(1,1,figsize=(nplates * 0.8,3))
+    sns.heatmap(sum_df.T, annot=True, ax=ax, vmax=1, vmin=0)
+
+    return fig, ax
 
 def qc(args):
 
@@ -143,6 +163,12 @@ def qc(args):
 
     plate_stats_fig, _ = plot_plate_stats(comb_stats_df)
     plate_stats_fig.savefig(f'{args.outdir}/plate_stats.png')
+
+    plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, plate_col='plate_id')
+    plate_summaries_fig.savefig(f'{args.outdir}/plate_summaries.png')
+
+    lims_plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, plate_col='lims_plate_id')
+    lims_plate_summaries_fig.savefig(f'{args.outdir}/lims_plate_summaries.png')
 
     logging.info('ANOSPP data QC ended')
 
