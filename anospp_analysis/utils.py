@@ -171,6 +171,10 @@ def prep_stats(stats_fn):
     # legacy stats calculated separately for each target, merging
     if 'target' in stats_df.columns:
         stats_df = stats_df.groupby('sample_id').sum(numeric_only=True).reset_index()
+    # add final read counts for comatibility with legacy pipeline
+    # that had a post-filtering step
+    if 'final' not in stats_df.columns:
+        stats_df['final'] = stats_df['nonchim']
     # logscale read counts, placeholder value for zero - -1
     for col in stats_df.columns.drop(['sample_id']):
         stats_df[f'{col}_log10'] = stats_df[col].replace(0,0.1).apply(lambda x: np.log10(x))

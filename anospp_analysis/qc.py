@@ -81,9 +81,9 @@ def plot_sample_filtering(sample_stats_df, samples_df, dada2_cols=DADA2_COLS):
 
 def plot_plate_stats(comb_stats_df, lims_plate=False):
 
-    logging.info('plotting plate stats')
     plate_col = 'lims_plate_id' if lims_plate else 'plate_id'
-
+    logging.info('plotting plate stats')
+    
     fig, axs = plt.subplots(3,1, figsize=(10,15))
     sns.stripplot(data=comb_stats_df,
                 y='final_log10',
@@ -119,11 +119,12 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
     plt.xticks(rotation=90)
 
     return fig, axs
+
 def plot_plate_summaries(comb_stats_df, lims_plate=False):
 
-    logging.info(f'plotting success summaries by {plate_col}')
     plate_col = 'lims_plate_id' if lims_plate else 'plate_id'
-
+    logging.info(f'plotting success summaries by {plate_col}')
+    
     # success rate definition
     comb_stats_df['over 1000 final reads'] = comb_stats_df.denoised > 1000
     comb_stats_df['over 30 targets'] = comb_stats_df.targets_recovered > 30
@@ -136,11 +137,42 @@ def plot_plate_summaries(comb_stats_df, lims_plate=False):
     y = comb_stats_df.groupby(plate_col)['over 1000 final reads'].count()
     sum_df = sum_df.divide(y, axis=0).reindex(plates)
 
-    fig, ax = plt.subplots(1,1,figsize=(nplates * 0.8,3))
+    fig, ax = plt.subplots(1,1,figsize=(nplates * .5 + 2, 4))
     sns.heatmap(sum_df.T, annot=True, ax=ax, vmax=1, vmin=0)
+    plt.xticks(rotation=90)
     plt.tight_layout()
 
     return fig, ax
+
+# todo kwargs
+# todo fill nan in comb_stats_df
+def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, center=None, cmap='coolwarm'):
+
+    plate_col = 'lims_plate_id' if lims_plate else 'plate_id'
+    well_col = 'lims_well_id' if lims_plate else 'well_id'
+    plot_width = 12 if lims_plate else 8
+    plot_height = 8 if lims_plate else 6
+    logging.info(f'plotting heatmap for {col} by {plate_col}')
+
+    plates = comb_stats_df[plate_col].unique()
+    nplates = comb_stats_df[plate_col].nunique()
+
+    comb_stats_df['row'] = comb_stats_df[well_col].str.slice(0,1)
+    comb_stats_df['col'] = comb_stats_df[well_col].str.slice(1).astype(int)
+
+    fig, axs = plt.subplots(nplates,1,figsize=(plot_width, plot_height*nplates))
+    for plate, ax in zip(plates, axs.flatten()):
+        pdf = comb_stats_df[comb_stats_df[plate_col] == plate]
+        hdf = pdf.pivot(index='row', columns='col', values=col)
+        sns.heatmap(hdf, annot=True, ax=ax, center=center, cmap=cmap)
+        if lims_plate:
+            ax.hlines([i * 2 for i in range(9)],0,24,colors='k')
+            ax.vlines([j * 2 for j in range(13)],0,16,colors='k')
+        title = f'{plate} {col}'
+        ax.set_title(title)
+    plt.tight_layout()
+
+    return fig, axs
 
 def qc(args):
 
@@ -173,6 +205,41 @@ def qc(args):
 
     lims_plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, lims_plate=True)
     lims_plate_summaries_fig.savefig(f'{args.outdir}/lims_plate_summaries.png')
+
+    plate_input_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='input_log10',
+                                            lims_plate=False, center=None)
+    plate_input_reads_fig.savefig(f'{args.outdir}/plate_input_reads.png')
+
+    lims_plate_input_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='input_log10',
+                                            lims_plate=True, center=None)
+    lims_plate_input_reads_fig.savefig(f'{args.outdir}/lims_plate_input_reads.png')
+
+    plate_final_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='final_log10',
+                                            lims_plate=False, center=None)
+    plate_final_reads_fig.savefig(f'{args.outdir}/plate_final_reads.png')
+
+    lims_plate_final_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='final_log10',
+                                            lims_plate=True, center=None)
+    lims_plate_final_reads_fig.savefig(f'{args.outdir}/lims_plate_final_reads.png')
+
+    plate_mosq_targets_fig, _ = plot_plate_heatmap(comb_stats_df, col='mosq_targets_recovered',
+                                            lims_plate=False, center=None)
+    plate_mosq_targets_fig.savefig(f'{args.outdir}/plate_mosq_targets.png')
+
+    lims_plate_final_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='mosq_targets_recovered',
+                                            lims_plate=True, center=None)
+    lims_plate_final_reads_fig.savefig(f'{args.outdir}/lims_plate_mosq_targets.png')
+
+    for pt in PLASM_TARGETS:
+        plate_plasm_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col=f'{pt}_log10_reads',
+                                                lims_plate=False, center=None)
+        plate_plasm_reads_fig.savefig(f'{args.outdir}/plate_{pt}_reads.png')
+
+        lims_plate_final_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col=f'{pt}_log10_reads',
+                                                lims_plate=True, center=None)
+        lims_plate_final_reads_fig.savefig(f'{args.outdir}/lims_plate_{pt}_reads.png')
+
+    
 
     logging.info('ANOSPP data QC ended')
 
