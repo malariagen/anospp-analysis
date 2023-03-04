@@ -1,16 +1,26 @@
 import pandas as pd
 import numpy as np
-# import glob
-# import itertools
-# import logging
-# import sys
-# import argparse
-# import os
+import logging
+import glob
+import itertools
+import sys
+import argparse
+import os
 
 MOSQ_TARGETS = [str(i) for i in range(62)]
 PLASM_TARGETS = ['P1','P2']
 TARGETS = MOSQ_TARGETS + PLASM_TARGETS
 CUTADAPT_TARGETS = TARGETS + ['unknown']
+
+def setup_logging(verbose=False):
+    try: 
+        del logging.root.handlers[:]
+    except:
+        pass
+    if verbose:
+        logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+    else:
+        logging.basicConfig(level=logging.WARNING, format='[%(levelname)s] %(message)s')
 
 def well_id_mapper():
     '''

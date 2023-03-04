@@ -24,6 +24,8 @@ def plot_target_balance(hap_df):
     '''
     read counts for sample-target combinations
     '''
+
+    logging.info('plotting targets balance')
     reads_per_sample = hap_df.groupby(['sample_id','target'])['reads'].sum().reset_index()
     # logscale, remove zeroes
     reads_per_sample['log10_reads'] = reads_per_sample.reads.replace(0,np.nan).apply(lambda x: np.log10(x))
@@ -40,6 +42,8 @@ def plot_allele_balance(hap_df):
     '''
     allele balance vs log coverage
     '''
+
+    logging.info('plotting allele balance and coverage')
     is_het = (hap_df.reads_fraction < 1)
     het_frac = hap_df[is_het].reads_fraction
     het_reads_log = hap_df[is_het].reads.apply(lambda x: np.log10(x))
@@ -54,8 +58,10 @@ def plot_sample_filtering(sample_stats_df, samples_df, dada2_cols=DADA2_COLS):
     '''
     Per-sample DADA2 filtering barplot
     '''
+    
+    logging.info('plotting per-sample filtering barplots')
+    
     # TODO sum stats across targets and log10 transform
-
     plates = samples_df.plate_id.unique()
     nplates = len(plates)
     fig, axs = plt.subplots(nplates,1,figsize=(20, 4 * nplates))
@@ -74,6 +80,9 @@ def plot_sample_filtering(sample_stats_df, samples_df, dada2_cols=DADA2_COLS):
     return fig, axs
 
 def plot_plate_stats(comb_stats_df):
+
+    logging.info('plotting plate stats')
+    
     fig, axs = plt.subplots(3,1, figsize=(10,15))
     sns.stripplot(data=comb_stats_df,
                 y='final_log10',
@@ -112,6 +121,8 @@ def plot_plate_stats(comb_stats_df):
 
 def qc(args):
 
+    setup_logging(verbose=True)
+    logging.info('ANOSPP data QC started')
     os.makedirs(args.outdir, exist_ok = True)
     
     hap_df = prep_hap(args.haplotypes)
@@ -132,6 +143,8 @@ def qc(args):
 
     plate_stats_fig, _ = plot_plate_stats(comb_stats_df)
     plate_stats_fig.savefig(f'{args.outdir}/plate_stats.png')
+
+    logging.info('ANOSPP data QC ended')
 
 def main(cmd):
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
