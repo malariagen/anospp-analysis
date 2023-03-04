@@ -206,40 +206,23 @@ def qc(args):
     lims_plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, lims_plate=True)
     lims_plate_summaries_fig.savefig(f'{args.outdir}/lims_plate_summaries.png')
 
-    plate_input_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='input_log10',
-                                            lims_plate=False, center=None)
-    plate_input_reads_fig.savefig(f'{args.outdir}/plate_input_reads.png')
-
-    lims_plate_input_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='input_log10',
-                                            lims_plate=True, center=None)
-    lims_plate_input_reads_fig.savefig(f'{args.outdir}/lims_plate_input_reads.png')
-
-    plate_final_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='final_log10',
-                                            lims_plate=False, center=None)
-    plate_final_reads_fig.savefig(f'{args.outdir}/plate_final_reads.png')
-
-    lims_plate_final_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='final_log10',
-                                            lims_plate=True, center=None)
-    lims_plate_final_reads_fig.savefig(f'{args.outdir}/lims_plate_final_reads.png')
-
-    plate_mosq_targets_fig, _ = plot_plate_heatmap(comb_stats_df, col='mosq_targets_recovered',
-                                            lims_plate=False, center=None)
-    plate_mosq_targets_fig.savefig(f'{args.outdir}/plate_mosq_targets.png')
-
-    lims_plate_final_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col='mosq_targets_recovered',
-                                            lims_plate=True, center=None)
-    lims_plate_final_reads_fig.savefig(f'{args.outdir}/lims_plate_mosq_targets.png')
-
-    for pt in PLASM_TARGETS:
-        plate_plasm_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col=f'{pt}_log10_reads',
-                                                lims_plate=False, center=None)
-        plate_plasm_reads_fig.savefig(f'{args.outdir}/plate_{pt}_reads.png')
-
-        lims_plate_final_reads_fig, _ = plot_plate_heatmap(comb_stats_df, col=f'{pt}_log10_reads',
-                                                lims_plate=True, center=None)
-        lims_plate_final_reads_fig.savefig(f'{args.outdir}/lims_plate_{pt}_reads.png')
-
-    
+    for col in ('input_log10', 
+                'final_log10',
+                'mosq_targets_recovered',
+                'P1_log10_reads',
+                'P2_log10_reads'):
+        for lims_plate in (True, False):
+            center = None
+            plate_hm_fig, _ = plot_plate_heatmap(
+                comb_stats_df,
+                col=col,
+                lims_plate=lims_plate,
+                center=center)
+            if lims_plate:
+                plate_hm_fn  = f'{args.outdir}/lims_plate_hm_{col}.png' 
+            else:
+                plate_hm_fn  = f'{args.outdir}/plate_hm_{col}.png' 
+            plate_hm_fig.savefig(plate_hm_fn)
 
     logging.info('ANOSPP data QC ended')
 
