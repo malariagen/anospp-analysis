@@ -176,7 +176,7 @@ def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, center=None, cmap='
 
 def qc(args):
 
-    setup_logging(verbose=True)
+    setup_logging(verbose=args.verbose)
     logging.info('ANOSPP data QC started')
     os.makedirs(args.outdir, exist_ok = True)
     
@@ -232,6 +232,8 @@ def main(cmd):
     parser.add_argument('--samples', help='Samples tsv file')
     parser.add_argument('--stats', help='DADA2 stats tsv file')
     parser.add_argument('--outdir', help='Output directory', default='qc')
+    parser.add_argument('-v', '--verbose', 
+                        help='Include INFO level log messages', action='store_true')
 
     args = parser.parse_args(cmd)
     args.outdir=args.outdir.rstrip('/')
