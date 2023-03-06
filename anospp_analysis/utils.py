@@ -85,6 +85,8 @@ def prep_hap(hap_fn):
     load haplotypes table
     '''
 
+    logging.info(f'preparing haplotypes table from {hap_fn}')
+
     hap_df = pd.read_csv(hap_fn, sep='\t')
 
     # compatibility with old style haplotype column names
@@ -95,6 +97,19 @@ def prep_hap(hap_fn):
     inplace=True)
 
     # TODO check columns
+    if 'reads_log10' not in hap_df.columns:
+        hap_df['reads_log10'] = hap_df['reads'].apply(lambda x: np.log10(x))
+
+    if 'total_reads' not in hap_df.columns:
+        hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['reads'].transform('sum')
+
+    if 'reads_fraction' not in hap_df.columns:
+        hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
+
+    if 'nalleles' not in hap_df.columns:
+        hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['consensus'].transform('nunique')
 
     return hap_df
 
@@ -102,6 +117,8 @@ def prep_samples(samples_fn):
     '''
     load sample manifest used for anospp pipeline
     '''
+
+    logging.info(f'preparing sample manifest from {samples_fn}')
 
     # allow reading from tsv (new style) or csv (old style)
     if samples_fn.endswith('csv'):
@@ -158,6 +175,8 @@ def prep_stats(stats_fn):
     For legacy stats table, summarise across targets
     '''
 
+    logging.info(f'preparing DADA2 statistics from {stats_fn}')
+
     stats_df = pd.read_csv(stats_fn, sep='\t')
     # TODO check columns
     # compatibility with legacy samples column names
@@ -188,6 +207,7 @@ def combine_stats(stats_df, hap_df, samples_df):
     Combined per-sample statistics
     '''
     comb_stats_df = pd.merge(stats_df, samples_df, on='sample_id', how='inner')
+    # TODO error if stats and samples don't match
     comb_stats_df.set_index('sample_id', inplace=True)
     comb_stats_df['targets_recovered'] = hap_df.groupby('sample_id') \
         ['target'].nunique()

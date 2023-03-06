@@ -54,6 +54,42 @@ def plot_allele_balance(hap_df):
     
     return het_plot
 
+def plot_sample_target_heatmap(hap_df, samples_df, col):
+
+    logging.info(f'plotting sample-target heatmap for {col}')
+
+    if col not in ('total_reads','nalleles'):
+        raise ValueError(f'sample target heatmap for {col} not implemented')
+
+    st_df = hap_df.pivot_table(
+        values=col, 
+        index='target', 
+        columns='sample_id', 
+        aggfunc=np.max).fillna(0)
+    
+    if col == 'total_reads':
+        st_df = np.log10(st_df.astype(float).replace(0, .1))
+    
+    plates = samples_df['plate_id'].unique()
+    nplates = len(plates)
+
+    fig, axs = plt.subplots(nplates,1,figsize=(22, 15 * nplates))
+
+    for plate, ax in zip(plates, axs):
+        plate_samples = samples_df.loc[samples_df['plate_id'] == plate, 'sample_id']
+        plot_df = st_df.reindex(columns=plate_samples, fill_value=0)
+        max_int = plot_df.max().max().astype(int) + 1
+        sns.heatmap(plot_df, 
+                    cmap='coolwarm', 
+                    center=2, 
+                    linewidths=.5, 
+                    linecolor='silver', 
+                    ax=ax, 
+                    cbar_kws={'ticks':range(max_int)})
+    plt.tight_layout()
+
+    return fig, axs
+
 def plot_sample_filtering(sample_stats_df, samples_df, dada2_cols=DADA2_COLS):
     '''
     Per-sample DADA2 filtering barplot
@@ -61,7 +97,6 @@ def plot_sample_filtering(sample_stats_df, samples_df, dada2_cols=DADA2_COLS):
     
     logging.info('plotting per-sample filtering barplots')
     
-    # TODO sum stats across targets and log10 transform
     plates = samples_df.plate_id.unique()
     nplates = len(plates)
     fig, axs = plt.subplots(nplates,1,figsize=(20, 4 * nplates))
@@ -144,9 +179,26 @@ def plot_plate_summaries(comb_stats_df, lims_plate=False):
 
     return fig, ax
 
-# todo kwargs
-# todo fill nan in comb_stats_df
-def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, center=None, cmap='coolwarm'):
+def plot_sample_success(comb_stats_df):
+
+    logging.info('plotting sample success')
+
+    fig, axs = plt.subplots(1,2,figsize=(12,6))
+    for col, ax in zip(('final_log10','filter_rate'), axs):
+        sns.scatterplot(data=comb_stats_df,
+                x='mosq_targets_recovered',
+                y=col,
+                hue='plate_id',
+                alpha=.5, 
+                ax=ax)
+        ax.axvline(30, alpha=.5)
+    axs[0].axhline(3, alpha=.5)
+    axs[1].axhline(.5, alpha=.5)
+    axs[1].get_legend().remove()
+
+    return fig, axs
+
+def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, **heatmap_kwargs):
 
     plate_col = 'lims_plate_id' if lims_plate else 'plate_id'
     well_col = 'lims_well_id' if lims_plate else 'well_id'
@@ -164,7 +216,7 @@ def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, center=None, cmap='
     for plate, ax in zip(plates, axs.flatten()):
         pdf = comb_stats_df[comb_stats_df[plate_col] == plate]
         hdf = pdf.pivot(index='row', columns='col', values=col)
-        sns.heatmap(hdf, annot=True, ax=ax, center=center, cmap=cmap)
+        sns.heatmap(hdf, ax=ax, **heatmap_kwargs)
         if lims_plate:
             ax.hlines([i * 2 for i in range(9)],0,24,colors='k')
             ax.vlines([j * 2 for j in range(13)],0,16,colors='k')
@@ -181,6 +233,7 @@ def qc(args):
     os.makedirs(args.outdir, exist_ok = True)
     
     logging.info('ANOSPP QC data import started')
+
     hap_df = prep_hap(args.haplotypes)
     samples_df = prep_samples(args.samples)
     stats_df = prep_stats(args.stats)
@@ -188,14 +241,21 @@ def qc(args):
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
 
     logging.info('ANOSPP QC plotting started')
+
     target_balance_fig, _ = plot_target_balance(hap_df)
     target_balance_fig.savefig(f'{args.outdir}/target_balance.png')
 
-    het_plot = plot_allele_balance(hap_df)
-    het_plot.savefig(f'{args.outdir}/allele_balance.png')
+    ab_plot = plot_allele_balance(hap_df)
+    ab_plot.savefig(f'{args.outdir}/allele_balance.png')
 
-    # sample_filtering_fig, _ = plot_sample_filtering(stats_df, samples_df)
-    # sample_filtering_fig.savefig(f'{args.outdir}/filter_per_sample.png')
+    for col in ('nalleles','total_reads'):
+        st_fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col=col)
+        st_fig.savefig(f'{args.outdir}/sample_target_{col}.png')
+
+    sys.exit()
+
+    sample_filtering_fig, _ = plot_sample_filtering(stats_df, samples_df)
+    sample_filtering_fig.savefig(f'{args.outdir}/filter_per_sample.png')
 
     plate_stats_fig, _ = plot_plate_stats(comb_stats_df, lims_plate=False)
     plate_stats_fig.savefig(f'{args.outdir}/plate_stats.png')
@@ -206,18 +266,33 @@ def qc(args):
     lims_plate_summaries_fig, _ = plot_plate_summaries(comb_stats_df, lims_plate=True)
     lims_plate_summaries_fig.savefig(f'{args.outdir}/lims_plate_summaries.png')
 
+    sample_success_fig, _ = plot_sample_success(comb_stats_df)
+    sample_success_fig.savefig(f'{args.outdir}/sample_success.png')
+
+    heatmap_kwargs = {
+        'center':None,
+        'annot':True,
+        'cmap':'coolwarm',
+        'fmt':'.2g'
+    }
     for col in ('input_log10', 
                 'final_log10',
+                'filter_rate',
                 'mosq_targets_recovered',
                 'P1_log10_reads',
                 'P2_log10_reads'):
         for lims_plate in (True, False):
-            center = None
+            if col == 'mosq_targets_recovered':
+                heatmap_kwargs['vmin'] = 0
+                heatmap_kwargs['vmax'] = 62
+            elif col == 'filter_rate':
+                heatmap_kwargs['vmin'] = 0
+                heatmap_kwargs['vmax'] = 1                
             plate_hm_fig, _ = plot_plate_heatmap(
                 comb_stats_df,
                 col=col,
                 lims_plate=lims_plate,
-                center=center)
+                **heatmap_kwargs)
             if lims_plate:
                 plate_hm_fn  = f'{args.outdir}/lims_plate_hm_{col}.png' 
             else:
