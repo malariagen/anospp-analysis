@@ -1,11 +1,6 @@
 import pandas as pd
 import numpy as np
 import logging
-import glob
-import itertools
-import sys
-import argparse
-import os
 
 MOSQ_TARGETS = [str(i) for i in range(62)]
 PLASM_TARGETS = ['P1','P2']
@@ -27,7 +22,7 @@ def well_id_mapper():
     Yields mapping of tag_index 1,2...96 
     to well id A1,B1...H12.
     N.B. subsequent plates can be mapped using
-    tag_index % 96
+    tag_index % 96, thus last well is inserted at 0
     '''
 
     well_ids = dict()
@@ -50,7 +45,7 @@ def lims_well_id_mapper():
     1 2
     3 4
     N.B. subsequent plates can be mapped using
-    tag_index % 384
+    tag_index % 384, thus last well is inserted at 0
     '''
     lims_well_ids = dict()
     tag = 1
@@ -96,7 +91,12 @@ def prep_hap(hap_fn):
         }), 
     inplace=True)
 
-    # TODO check columns
+    for col in ('sample_id',
+                'target',
+                'consensus',
+                'reads'):
+        assert col in hap_df.columns, 'hap column {col} not found'
+
     if 'reads_log10' not in hap_df.columns:
         hap_df['reads_log10'] = hap_df['reads'].apply(lambda x: np.log10(x))
 
@@ -138,9 +138,12 @@ def prep_samples(samples_fn):
         'Replicate':'replicate_id'
         }), 
     inplace=True)
-    
-    # TODO check columns
-    # samples_df.set_index('sample_id', inplace=True)
+
+    for col in ('sample_id',
+                'run_id',
+                'lane_index',
+                'tag_index'):
+        assert col in samples_df.columns, 'samples column {col} not found'
 
     # plate ids
     if 'plate_id' in samples_df.columns:
@@ -156,8 +159,11 @@ def prep_samples(samples_fn):
     assert ~samples_df.well_id.isna().any(), 'Could not infer well_id for all samples'
     assert samples_df.well_id.isin(well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
     # lims plate ids
-    if samples_df.id_library_lims.str.contains(':').all():
-        samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(':',n=1,expand=True)
+    if ('id_library_lims' in samples_df.columns and
+        samples_df.id_library_lims.str.contains(':').all()):
+            samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(':', 
+                                                                                                n = 1, 
+                                                                                                expand=True)
     else:
         samples_df['lims_plate_id'] = samples_df.apply(lambda r: f'lp_{r.run_id}_{(r.tag_index - 1) // 384 + 1}',
             axis=1)
@@ -178,12 +184,21 @@ def prep_stats(stats_fn):
     logging.info(f'preparing DADA2 statistics from {stats_fn}')
 
     stats_df = pd.read_csv(stats_fn, sep='\t')
-    # TODO check columns
     # compatibility with legacy samples column names
     stats_df.rename(columns={
         's_Sample':'sample_id'
         },
         inplace=True)
+    
+    for col in ('sample_id',
+                'input',
+                'filtered',
+                'denoisedF',
+                'denoisedR',
+                'merged',
+                'nonchim'):
+        assert col in stats_df.columns, 'stats column {col} not found'
+
     # denoising happens for F and R reads independently, we take minimum of those 
     # as an estimate for retained read count
     stats_df['denoised'] = stats_df[['denoisedF','denoisedR']].min(axis=1)
@@ -206,8 +221,17 @@ def combine_stats(stats_df, hap_df, samples_df):
     '''
     Combined per-sample statistics
     '''
+
+    logging.info('preparing combined stats')
+
+    # some samples can be missing from stats due to DADA2 filtering
+    if set(stats_df.sample_id) - set(samples_df.sample_id) != set():
+        logging.error('sample_id mismatch between samples and stats, QC results will be compromised')
+    # some samples can be missing from haps due to DADA2 & post-processing filtering
+    elif set(hap_df.sample_id) - set(samples_df.sample_id) != set():
+        logging.error('sample_id mismatch between haps and samples, QC results will be compromised')
+
     comb_stats_df = pd.merge(stats_df, samples_df, on='sample_id', how='inner')
-    # TODO error if stats and samples don't match
     comb_stats_df.set_index('sample_id', inplace=True)
     comb_stats_df['targets_recovered'] = hap_df.groupby('sample_id') \
         ['target'].nunique()
