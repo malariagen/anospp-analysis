@@ -75,6 +75,16 @@ def lims_well_id_mapper():
 
     return lims_well_ids
 
+def seqid_generator(hap_df):
+
+    seqids = dict()
+    for tgt, group in hap_df.groupby(['target']):
+        for (i, cons) in enumerate(group['consensus'].unique()):
+            seqids[tgt + cons] = '{}-{}'.format(tgt, i)
+    hap_df['seqid'] = (hap_df.target + hap_df.consensus).replace(seqids)
+
+    return hap_df
+
 def prep_hap(hap_fn):
     '''
     load haplotypes table
@@ -110,6 +120,8 @@ def prep_hap(hap_fn):
     if 'nalleles' not in hap_df.columns:
         hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
             ['consensus'].transform('nunique')
+        
+    hap_df = seqid_generator(hap_df)
 
     return hap_df
 
