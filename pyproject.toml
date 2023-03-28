@@ -13,6 +13,7 @@ pandas = "*"
 numpy = "*"
 seaborn = "*"
 BioPython = "*"
+cutadapt = "*"
 
 [tool.poetry.group.dev.dependencies]
 
