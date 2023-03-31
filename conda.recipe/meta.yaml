@@ -1,0 +1,49 @@
+{% set name = "anospp-analysis" %}
+{% set version = "0.1.1" %}
+
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/anospp_analysis-{{ version }}.tar.gz
+  sha256: 818663ef59598cb38830ee7c6f086a742fcdb89fb259f8be97f34a1ee7d83d8f
+
+build:
+  number: 0
+  script: {{ PYTHON }} -m pip install . -vv
+
+requirements:
+  host:
+    - pip
+    - poetry
+    - python
+  run:
+    - biopython
+    - cutadapt
+    - numpy 
+    - pandas
+    - python
+    - seaborn
+    - blast
+    - fasttree
+    - mafft
+
+test:
+  imports:
+    - anospp_analysis
+  commands:
+    - pip check
+  requires:
+    - pip
+
+about:
+  home: https://pypi.org/project/anospp-analysis/
+  summary: ANOSPP data analysis
+  license: MIT
+  license_file: LICENSE
+
+extra:
+  recipe-maintainers:
+    - amakunin
