@@ -17,6 +17,10 @@ cutadapt = "*"
 
 [tool.poetry.group.dev.dependencies]
 
+[tool.poetry.scripts]
+anospp-prep = "anospp_analysis.prep:main"
+anospp-qc = "anospp_analysis.qc:main"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

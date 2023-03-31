@@ -112,7 +112,7 @@ def prep_dada2(args):
 
     logging.info('ANOSPP data prep complete')
 
-def main(cmd):
+def main():
     
     parser = argparse.ArgumentParser("Prepare ANOSPP data for analysis")
     parser.add_argument('-t', '--dada_table', help='DADA2 stats tsv file', required=True)
@@ -124,7 +124,7 @@ def main(cmd):
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
-    args = parser.parse_args(cmd)
+    args = parser.parse_args()
 
     args.work_dir=args.work_dir.rstrip('/')
     for fn in args.adapters, args.dada_table, args.manifest:
@@ -133,4 +133,4 @@ def main(cmd):
     prep_dada2(args)
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main()
