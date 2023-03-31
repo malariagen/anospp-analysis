@@ -5,7 +5,7 @@ import glob
 import sys
 import os
 
-from util import *
+from .util import *
 
 # optimised cutadapt args
 CUTADAPT_ARGS = '-O 10 --match-read-wildcards'

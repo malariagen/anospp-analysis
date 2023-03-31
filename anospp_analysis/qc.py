@@ -7,7 +7,7 @@ import sys
 import os
 import argparse
 
-from util import *
+from .util import *
 
 DADA2_COLS = OrderedDict([
     ('input','removed by filterAndTrim'), 
