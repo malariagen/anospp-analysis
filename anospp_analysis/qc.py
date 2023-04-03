@@ -7,7 +7,7 @@ import sys
 import os
 import argparse
 
-from util import *
+from .util import *
 
 DADA2_COLS = OrderedDict([
     ('input','removed by filterAndTrim'), 
@@ -296,7 +296,7 @@ def qc(args):
 
     logging.info('ANOSPP data QC ended')
 
-def main(cmd):
+def main():
     
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
     parser.add_argument('--haplotypes', help='Haplotypes tsv file')
@@ -306,9 +306,9 @@ def main(cmd):
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
-    args = parser.parse_args(cmd)
+    args = parser.parse_args()
     args.outdir=args.outdir.rstrip('/')
     qc(args)
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main()

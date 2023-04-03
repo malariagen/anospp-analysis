@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "anospp-analysis"
-version = "0.1.1"
+version = "0.1.2"
 description = "ANOSPP data analysis"
 authors = ["Alex Makunin <am60@sanger.ac.uk>"]
 license = "MIT"
@@ -16,8 +16,10 @@ BioPython = "*"
 cutadapt = "*"
 
 [tool.poetry.group.dev.dependencies]
-poetry2setup = "^1.1.0"
 
+[tool.poetry.scripts]
+anospp-prep = "anospp_analysis.prep:main"
+anospp-qc = "anospp_analysis.qc:main"
 
 [build-system]
 requires = ["poetry-core"]
