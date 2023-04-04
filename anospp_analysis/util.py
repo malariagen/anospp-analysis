@@ -123,6 +123,15 @@ def prep_hap(hap_fn):
         
     hap_df = seqid_generator(hap_df)
 
+    hap_df['target'] = pd.Categorical(hap_df['target'], 
+                                    categories=CUTADAPT_TARGETS, 
+                                    ordered=True)
+    
+    hap_df.sort_values(by=[
+        'sample_id',
+        'target'
+    ], inplace=True)
+
     return hap_df
 
 def prep_samples(samples_fn):
