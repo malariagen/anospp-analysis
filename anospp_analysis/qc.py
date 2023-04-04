@@ -3,7 +3,6 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import OrderedDict
-import sys
 import os
 import argparse
 
@@ -302,10 +301,10 @@ def qc(args):
 def main():
     
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
-    parser.add_argument('--haplotypes', help='Haplotypes tsv file')
-    parser.add_argument('--samples', help='Samples tsv file')
-    parser.add_argument('--stats', help='DADA2 stats tsv file')
-    parser.add_argument('--outdir', help='Output directory', default='qc')
+    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
+    parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
+    parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-o', '--outdir', help='Output directory', default='qc')
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
