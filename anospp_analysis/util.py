@@ -78,7 +78,7 @@ def lims_well_id_mapper():
 def seqid_generator(hap_df):
 
     seqids = dict()
-    for tgt, group in hap_df.groupby(['target']):
+    for tgt, group in hap_df.groupby('target'):
         for (i, cons) in enumerate(group['consensus'].unique()):
             seqids[tgt + cons] = '{}-{}'.format(tgt, i)
     hap_df['seqid'] = (hap_df.target + hap_df.consensus).replace(seqids)
@@ -105,7 +105,7 @@ def prep_hap(hap_fn):
                 'target',
                 'consensus',
                 'reads'):
-        assert col in hap_df.columns, 'hap column {col} not found'
+        assert col in hap_df.columns, f'hap column {col} not found'
 
     if 'reads_log10' not in hap_df.columns:
         hap_df['reads_log10'] = hap_df['reads'].apply(lambda x: np.log10(x))
@@ -155,7 +155,7 @@ def prep_samples(samples_fn):
                 'run_id',
                 'lane_index',
                 'tag_index'):
-        assert col in samples_df.columns, 'samples column {col} not found'
+        assert col in samples_df.columns, f'samples column {col} not found'
 
     # plate ids
     if 'plate_id' in samples_df.columns:
@@ -209,7 +209,7 @@ def prep_stats(stats_fn):
                 'denoisedR',
                 'merged',
                 'nonchim'):
-        assert col in stats_df.columns, 'stats column {col} not found'
+        assert col in stats_df.columns, f'stats column {col} not found'
 
     # denoising happens for F and R reads independently, we take minimum of those 
     # as an estimate for retained read count

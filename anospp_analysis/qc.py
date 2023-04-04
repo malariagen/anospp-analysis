@@ -31,6 +31,7 @@ def plot_target_balance(hap_df):
         x = 'target', y = 'log10_reads', hue = 'target', 
         alpha = .1, jitter = .3,
         ax = ax)
+    ax.get_legend().remove()
     ax.set_ylabel('reads (log10)')
     ax.set_xlabel('target')
 
@@ -209,6 +210,8 @@ def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, **heatmap_kwargs):
     comb_stats_df['col'] = comb_stats_df[well_col].str.slice(1).astype(int)
 
     fig, axs = plt.subplots(nplates,1,figsize=(plot_width, plot_height*nplates))
+    if nplates == 1:
+        axs = np.array([axs])
     for plate, ax in zip(plates, axs.flatten()):
         pdf = comb_stats_df[comb_stats_df[plate_col] == plate]
         hdf = pdf.pivot(index='row', columns='col', values=col)
