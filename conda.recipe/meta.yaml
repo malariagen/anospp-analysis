@@ -1,5 +1,5 @@
 {% set name = "anospp-analysis" %}
-{% set version = "0.1.1" %}
+{% set version = "0.1.2" %}
 
 
 package:
@@ -8,9 +8,10 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/anospp_analysis-{{ version }}.tar.gz
-  sha256: 818663ef59598cb38830ee7c6f086a742fcdb89fb259f8be97f34a1ee7d83d8f
+  sha256: 402930a959233daa4e0a4255d134eceb07d65421234be422c36e9874c51ecef0
 
 build:
+  noarch: python
   number: 0
   script: {{ PYTHON }} -m pip install . -vv
 
