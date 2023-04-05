@@ -100,7 +100,7 @@ def prep_dada2(args):
 
     cutadapt_deplex(args.dada_table, args.adapters, CUTADAPT_ARGS, args.work_dir)
 
-    hap_df = get_hap_df(args.dada_table, args.work_dir, args.manifest)
+    hap_df = get_hap_df(args.dada_table, args.work_dir)
 
     hap_df[[
         'sample_id',
@@ -116,8 +116,8 @@ def main():
     parser = argparse.ArgumentParser("Convert DADA2 output to ANOSPP haplotypes tsv")
     parser.add_argument('-t', '--dada_table', help='DADA2 stats tsv file', required=True)
     parser.add_argument('-a', '--adapters', help='adapters fasta file for deplexing with cutadapt', required=True)
-    parser.add_argument('-o', '--out_haps', help='output haplotypes tsv file', default='haps.tsv')
-    parser.add_argument('-w', '--work_dir', help='working directory for intermediate files',
+    parser.add_argument('-o', '--out_haps', help='output haplotypes tsv file. Default: haps.tsv', default='haps.tsv')
+    parser.add_argument('-w', '--work_dir', help='working directory for intermediate files. Default: work',
                         default='work')
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
@@ -125,7 +125,7 @@ def main():
     args = parser.parse_args()
 
     args.work_dir=args.work_dir.rstrip('/')
-    for fn in args.adapters, args.dada_table, args.manifest:
+    for fn in args.adapters, args.dada_table:
         assert os.path.isfile(fn), f'{fn} not found'
 
     prep_dada2(args)
