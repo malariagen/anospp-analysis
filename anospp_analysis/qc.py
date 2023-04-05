@@ -276,14 +276,18 @@ def qc(args):
                 'filter_rate',
                 'mosq_targets_recovered',
                 'P1_log10_reads',
-                'P2_log10_reads'):
+                'P2_log10_reads',
+                'multiallelic_targets'):
         for lims_plate in (True, False):
             if col == 'mosq_targets_recovered':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = 62
             elif col == 'filter_rate':
                 heatmap_kwargs['vmin'] = 0
-                heatmap_kwargs['vmax'] = 1                
+                heatmap_kwargs['vmax'] = 1 
+            else:
+                heatmap_kwargs['vmin'] = None
+                heatmap_kwargs['vmax'] = None             
             fig, _ = plot_plate_heatmap(
                 comb_stats_df,
                 col=col,
