@@ -78,7 +78,7 @@ def lims_well_id_mapper():
 def seqid_generator(hap_df):
 
     seqids = dict()
-    for tgt, group in hap_df.groupby(['target']):
+    for tgt, group in hap_df.groupby('target'):
         for (i, cons) in enumerate(group['consensus'].unique()):
             seqids[tgt + cons] = '{}-{}'.format(tgt, i)
     hap_df['seqid'] = (hap_df.target + hap_df.consensus).replace(seqids)
@@ -105,7 +105,7 @@ def prep_hap(hap_fn):
                 'target',
                 'consensus',
                 'reads'):
-        assert col in hap_df.columns, 'hap column {col} not found'
+        assert col in hap_df.columns, f'hap column {col} not found'
 
     if 'reads_log10' not in hap_df.columns:
         hap_df['reads_log10'] = hap_df['reads'].apply(lambda x: np.log10(x))
@@ -122,6 +122,15 @@ def prep_hap(hap_fn):
             ['consensus'].transform('nunique')
         
     hap_df = seqid_generator(hap_df)
+
+    hap_df['target'] = pd.Categorical(hap_df['target'], 
+                                    categories=CUTADAPT_TARGETS, 
+                                    ordered=True)
+    
+    hap_df.sort_values(by=[
+        'sample_id',
+        'target'
+    ], inplace=True)
 
     return hap_df
 
@@ -155,7 +164,7 @@ def prep_samples(samples_fn):
                 'run_id',
                 'lane_index',
                 'tag_index'):
-        assert col in samples_df.columns, 'samples column {col} not found'
+        assert col in samples_df.columns, f'samples column {col} not found'
 
     # plate ids
     if 'plate_id' in samples_df.columns:
@@ -209,7 +218,7 @@ def prep_stats(stats_fn):
                 'denoisedR',
                 'merged',
                 'nonchim'):
-        assert col in stats_df.columns, 'stats column {col} not found'
+        assert col in stats_df.columns, f'stats column {col} not found'
 
     # denoising happens for F and R reads independently, we take minimum of those 
     # as an estimate for retained read count
@@ -262,6 +271,8 @@ def combine_stats(stats_df, hap_df, samples_df):
         comb_stats_df[f'{pt}_reads'] = comb_stats_df[f'{pt}_reads'].fillna(0)
         comb_stats_df[f'{pt}_log10_reads'] = comb_stats_df[f'{pt}_reads'] \
             .replace(0,0.1).apply(lambda x: np.log10(x))
+    comb_stats_df['multiallelic_targets'] = (hap_df.groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
+    comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0)
     comb_stats_df.reset_index(inplace=True)
         
     return comb_stats_df

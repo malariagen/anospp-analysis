@@ -3,7 +3,6 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import OrderedDict
-import sys
 import os
 import argparse
 
@@ -31,6 +30,7 @@ def plot_target_balance(hap_df):
         x = 'target', y = 'log10_reads', hue = 'target', 
         alpha = .1, jitter = .3,
         ax = ax)
+    ax.get_legend().remove()
     ax.set_ylabel('reads (log10)')
     ax.set_xlabel('target')
 
@@ -209,6 +209,8 @@ def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, **heatmap_kwargs):
     comb_stats_df['col'] = comb_stats_df[well_col].str.slice(1).astype(int)
 
     fig, axs = plt.subplots(nplates,1,figsize=(plot_width, plot_height*nplates))
+    if nplates == 1:
+        axs = np.array([axs])
     for plate, ax in zip(plates, axs.flatten()):
         pdf = comb_stats_df[comb_stats_df[plate_col] == plate]
         hdf = pdf.pivot(index='row', columns='col', values=col)
@@ -231,7 +233,7 @@ def qc(args):
     logging.info('ANOSPP QC data import started')
 
     hap_df = prep_hap(args.haplotypes)
-    samples_df = prep_samples(args.samples)
+    samples_df = prep_samples(args.manifest)
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
@@ -274,14 +276,18 @@ def qc(args):
                 'filter_rate',
                 'mosq_targets_recovered',
                 'P1_log10_reads',
-                'P2_log10_reads'):
+                'P2_log10_reads',
+                'multiallelic_targets'):
         for lims_plate in (True, False):
             if col == 'mosq_targets_recovered':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = 62
             elif col == 'filter_rate':
                 heatmap_kwargs['vmin'] = 0
-                heatmap_kwargs['vmax'] = 1                
+                heatmap_kwargs['vmax'] = 1 
+            else:
+                heatmap_kwargs['vmin'] = None
+                heatmap_kwargs['vmax'] = None             
             fig, _ = plot_plate_heatmap(
                 comb_stats_df,
                 col=col,
@@ -299,10 +305,10 @@ def qc(args):
 def main():
     
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
-    parser.add_argument('--haplotypes', help='Haplotypes tsv file')
-    parser.add_argument('--samples', help='Samples tsv file')
-    parser.add_argument('--stats', help='DADA2 stats tsv file')
-    parser.add_argument('--outdir', help='Output directory', default='qc')
+    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
+    parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
+    parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='qc')
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
