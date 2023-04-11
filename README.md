@@ -23,10 +23,6 @@ conda activate anospp_analysis
 poetry install
 ```
 
-Activate development environment:
-```
-poetry shell
-```
 
 ### Usage & testing
 
