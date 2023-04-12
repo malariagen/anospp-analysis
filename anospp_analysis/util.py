@@ -120,6 +120,9 @@ def prep_hap(hap_fn):
     if 'nalleles' not in hap_df.columns:
         hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
             ['consensus'].transform('nunique')
+
+    hap_df['consensus'] = hap_df['consensus'].str.upper()
+    hap_df.drop_duplicates(inplace=True, ignore_index=True)
         
     hap_df = seqid_generator(hap_df)
 
@@ -130,7 +133,7 @@ def prep_hap(hap_fn):
     hap_df.sort_values(by=[
         'sample_id',
         'target'
-    ], inplace=True)
+    ], inplace=True, ignore_index=True)
 
     return hap_df
 
