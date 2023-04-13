@@ -121,7 +121,25 @@ def construct_unique_kmer_table(mosq_hap_df, k):
             table[t,u,kmerdict[sq[i:i+k]]] += 1
     return(table)
 
-def identify_error_seqs(mosq_hap_df, kmers, k):
+def parse_seqid(seqid_s):
+    '''
+    Parse seqids passed as a string or a pandas Series
+    '''
+    if isinstance(seqid_s, str):
+        parsed_seqid = pd.DataFrame([seqid_s.split('-')])
+    else:
+        parsed_seqid = seqid_s.str.split('-', expand=True)
+    
+    assert parsed_seqid[0].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
+    try:
+        parsed_seqid = parsed_seqid.astype(int)
+    except:
+        raise Exception('Dataframe contains seqids which cannot be converted to integers')
+    return(parsed_seqid)
+
+
+
+def identify_error_seqs(mosq_hap_df, kmers, k, error_snps = 2):
     '''
     Identify haplotypes resulting from sequencing/PCR errors
     Cannot distinguish between true heterozygote, contaminated homozygote and homozygote with error sequence
@@ -129,24 +147,23 @@ def identify_error_seqs(mosq_hap_df, kmers, k):
     '''
 
     logging.info('identifying haplotypes resulting from sequencing/PCR errors')
-    threshold=2*k+1
+    #set the k-mer threshold for the number of snps allowed for errors
+    threshold=error_snps*k+1
     seqid_size = mosq_hap_df.groupby('seqid').size()
     singleton_seqids = seqid_size[seqid_size==1].index
-    error_candidates = singleton_seqids[(singleton_seqids.isin(mosq_hap_df.loc[mosq_hap_df.nalleles>2, 'seqid']))]
+    error_candidates = mosq_hap_df.query('seqid in @singleton_seqids & nalleles>2')
 
     error_seqs = []
-    for tgt in pd.DataFrame(pd.Series(error_candidates).str.split('-', expand=True))[0].unique():
-        for cand_hap in error_candidates[error_candidates.str.startswith(f'{tgt}-')]:
-            cand_sample = mosq_hap_df.loc[mosq_hap_df.seqid==cand_hap, 'sample_id'].values[0]
-            cand_sample_haps = mosq_hap_df.loc[(mosq_hap_df.sample_id==cand_sample) & (mosq_hap_df.target==int(tgt))]
-            if cand_sample_haps.shape[0]>1:
-                for i in cand_sample_haps.index[cand_sample_haps.seqid.isin(error_candidates)]:
-                    for j in cand_sample_haps.index[(cand_sample_haps.index!=i) & (~cand_sample_haps.seqid.isin(error_seqs))]:
-                        dist = np.abs(kmers[int(tgt), int(cand_sample_haps.loc[i, 'seqid'].split('-')[1]), :] - \
-                            kmers[int(tgt), int(cand_sample_haps.loc[j, 'seqid'].split('-')[1]), :]).sum()
-                        if dist<threshold:
-                            error_seqs.append(cand_sample_haps.loc[i, 'seqid'])
-                            break
+    for idx, cand in error_candidates.iterrows():
+        possible_sources = mosq_hap_df.query('sample_id == @cand.sample_id & target == @cand.target & \
+                                             not seqid in @error_seqs & seqid != @cand.seqid')
+        cand_parsed_seqid = parse_seqid(cand.seqid)
+        possible_sources_parsed_seqid = parse_seqid(possible_sources.seqid)
+        for possible_source in possible_sources_parsed_seqid[1]:
+            abs_kmer_dist = np.abs(kmers[cand.target,cand_parsed_seqid[1],:] - kmers[cand.target,possible_source,:]).sum()
+            if abs_kmer_dist<threshold:
+                error_seqs.append(cand.seqid)
+                break
     
     logging.info(f'identified {len(error_seqs)} error sequences')
 
@@ -170,7 +187,7 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
         #Find nearest neighbours
         cbn = np.arange(int(maxima[t]))[a==a.min()]
         #include in dict
-        nndict[seqid] = cbn
+        nndict[seqid] = (cbn, a.min())
 
     return(nndict)
 
@@ -225,7 +242,7 @@ def estimate_contamination(comb_stats_df, non_error_hap_df):
     '''
     logging.info('esimating contamination risk')
 
-    comb_stats_df['multiallelic_mosq_targets'] = (non_error_hap_df.groupby('sample_id')['target'].value_counts() > 2\
+    comb_stats_df['multiallelic_mosq_targets'] = (non_error_hap_df.groupby('sample_id')['target'].value_counts() > 2 \
         ).groupby(level='sample_id').sum()
     comb_stats_df['multiallelic_mosq_targets'] = comb_stats_df['multiallelic_targets'].fillna(0)
 
@@ -295,6 +312,7 @@ def nn(args):
 
     logging.info(f'writing assignment results to {args.outdir}')
     comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
+    logging.info('All done!')
 
     
 
