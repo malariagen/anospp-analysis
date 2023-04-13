@@ -122,7 +122,6 @@ def prep_hap(hap_fn):
             ['consensus'].transform('nunique')
 
     hap_df['consensus'] = hap_df['consensus'].str.upper()
-    hap_df.drop_duplicates(inplace=True, ignore_index=True)
         
     hap_df = seqid_generator(hap_df)
 
@@ -133,7 +132,7 @@ def prep_hap(hap_fn):
     hap_df.sort_values(by=[
         'sample_id',
         'target'
-    ], inplace=True, ignore_index=True)
+    ], inplace=True)
 
     return hap_df
 
