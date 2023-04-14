@@ -36,38 +36,38 @@ def prep_reference_index(reference_dn, path_to_refversion='test_data'):
 
     assert os.path.isdir(reference_path), f'reference version {reference_dn} does not exist at {reference_path}'
 
-    assert os.path.isfile(f'{reference_path}haplotypes.tsv'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/haplotypes.tsv'), f'reference version {reference_dn} at {reference_path} \
         does not contain required haplotypes.tsv file'
     ref_hap_df = pd.read_csv(f'{reference_path}haplotypes.tsv', sep='\t')
 
-    assert os.path.isfile(f'{reference_path}allele_freq_coarse.npy'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/allele_freq_coarse.npy'), f'reference version {reference_dn} at {reference_path} \
         does not contain required allele_freq_coarse.npy file'
     af_c = np.load(f'{reference_path}/allele_freq_coarse.npy')
-    assert os.path.isfile(f'{reference_path}allele_freq_int.npy'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/allele_freq_int.npy'), f'reference version {reference_dn} at {reference_path} \
         does not contain required allele_freq_int.npy file'
     af_i = np.load(f'{reference_path}/allele_freq_int.npy')
-    assert os.path.isfile(f'{reference_path}allele_freq_fine.npy'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/allele_freq_fine.npy'), f'reference version {reference_dn} at {reference_path} \
         does not contain required allele_freq_fine.npy file'
     af_f = np.load(f'{reference_path}/allele_freq_fine.npy')
 
-    assert os.path.isfile(f'{reference_path}sgp_coarse.txt'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/sgp_coarse.txt'), f'reference version {reference_dn} at {reference_path} \
         does not contain required sgp_coarse.txt file'
     sgp_c = []
-    with open(f'{reference_path}sgp_coarse.txt', 'r') as fn:
+    with open(f'{reference_path}/sgp_coarse.txt', 'r') as fn:
         for line in fn:
             sgp_c.append(line.strip())
 
-    assert os.path.isfile(f'{reference_path}sgp_int.txt'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/sgp_int.txt'), f'reference version {reference_dn} at {reference_path} \
         does not contain required sgp_int.txt file'
     sgp_i = []
-    with open(f'{reference_path}sgp_int.txt', 'r') as fn:
+    with open(f'{reference_path}/sgp_int.txt', 'r') as fn:
         for line in fn:
             sgp_i.append(line.strip())
 
-    assert os.path.isfile(f'{reference_path}sgp_fine.txt'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/sgp_fine.txt'), f'reference version {reference_dn} at {reference_path} \
         does not contain required sgp_fine.txt file'
     sgp_f = []
-    with open(f'{reference_path}sgp_fine.txt', 'r') as fn:
+    with open(f'{reference_path}/sgp_fine.txt', 'r') as fn:
         for line in fn:
             sgp_f.append(line.strip())
 
@@ -191,11 +191,14 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
 
     return(nndict)
 
-def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, test_samples, nndict, af_c, af_i, af_f, outdir):
+def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f, outdir):
     '''
     The main NN assignment function
     it outputs three dataframes containing the assignment proportions to each species-group for the three levels
     '''
+    #get samples with at least 10 targets
+    test_samples = non_error_hap_df.groupby('sample_id').filter(lambda x: x['target'].nunique() >=10)['sample_id'].unique()
+
     logging.info(f'performing NN assignment for {len(test_samples)} samples')
 
     #set up data-output as numpy arrays (will be made into dataframes later)
@@ -234,17 +237,38 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, test_samples, nn
     result_fine = pd.DataFrame(rf, index=test_samples, columns=ref_hap_df.fine_sgp.cat.categories)
     result_fine.to_csv(f"{outdir}/assignment_fine.csv")
         
-    return(result_coarse, result_intermediate, result_fine)
+    return(result_coarse, result_intermediate, result_fine, test_samples)
+
+def recompute_coverage(comb_stats_df, non_error_hap_df):
+    '''
+    recompute coverage stats after filtering and error removal
+    '''
+    logging.info('recompute coverage stats')
+
+    #recompute multiallelic calls after filtering and error removal
+    comb_stats_df['multiallelic_mosq_targets'] = (non_error_hap_df.groupby('sample_id')['target'].value_counts() > 2 \
+        ).groupby(level='sample_id').sum()
+    comb_stats_df['multiallelic_mosq_targets'] = comb_stats_df['multiallelic_mosq_targets'].fillna(0)
+
+    #recompute read counts after filtering and error removal
+    comb_stats_df['mosq_reads'] = non_error_hap_df[non_error_hap_df.target.isin(MOSQ_TARGETS)] \
+        .groupby('sample_id')['reads'].sum()
+    comb_stats_df['mosq_reads'] = comb_stats_df['mosq_reads'].fillna(0)
+
+    #recompute targets recovered after filtering and error removal
+    comb_stats_df['mosq_targets_recovered'] = non_error_hap_df[non_error_hap_df.target.isin(MOSQ_TARGETS)] \
+        .groupby('sample_id')['target'].nunique()
+    comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].fillna(0)
+
+    return(comb_stats_df)
+
+
 
 def estimate_contamination(comb_stats_df, non_error_hap_df):
     '''
     estimate contamination from read counts and multiallelic targets
     '''
-    logging.info('esimating contamination risk')
-
-    comb_stats_df['multiallelic_mosq_targets'] = (non_error_hap_df.groupby('sample_id')['target'].value_counts() > 2 \
-        ).groupby(level='sample_id').sum()
-    comb_stats_df['multiallelic_mosq_targets'] = comb_stats_df['multiallelic_targets'].fillna(0)
+    logging.info('estimating contamination risk')
 
     #Exceptions -- target 32 for funestus
     funestus_32 = non_error_hap_df[(non_error_hap_df.sample_id.isin(comb_stats_df.loc[comb_stats_df.res_fine=='Anopheles_funestus'])) & \
@@ -264,6 +288,8 @@ def estimate_contamination(comb_stats_df, non_error_hap_df):
 def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_coarse, result_int, result_fine):
 
     logging.info('generating NN calls from assignment info')
+
+    comb_stats_df = recompute_coverage(comb_stats_df, non_error_hap_df)
 
     comb_stats_df.loc[comb_stats_df.sample_id.isin(test_samples), 'NN_assignment'] = 'yes'
     comb_stats_df.loc[comb_stats_df.NN_assignment.isnull(), 'NN_assignment'] = 'no'
@@ -291,7 +317,6 @@ def nn(args):
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
     mosq_hap_df = prep_mosquito_haps(hap_df)
-    test_samples = comb_stats_df.loc[comb_stats_df.mosq_targets_recovered >= 10, 'sample_id'].values
 
     ref_hap_df, af_c, af_i, af_f = prep_reference_index(args.reference, path_to_refversion=args.path_to_refversion)
 
@@ -307,7 +332,7 @@ def nn(args):
     nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
     nn_df[['nn_id', 'nn_dist']].to_csv(f'{args.outdir}/nn_dictionary.tsv', sep='\t')
 
-    result_coarse, result_int, result_fine = perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, test_samples, nndict, \
+    result_coarse, result_int, result_fine, test_samples = perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, \
         af_c, af_i, af_f, args.outdir)
 
     comb_stats_df = generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, \
