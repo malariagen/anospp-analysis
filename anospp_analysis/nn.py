@@ -76,8 +76,12 @@ def prep_reference_index(reference_dn, path_to_refversion='test_data'):
     ref_hap_df['intermediate_sgp'] = pd.Categorical(ref_hap_df['intermediate_sgp'], sgp_i, ordered=True)
     ref_hap_df['fine_sgp'] = pd.Categorical(ref_hap_df['fine_sgp'], sgp_f, ordered=True)
 
+    assert os.path.isfile(f'{reference_path}/multiallelism.tsv'), f'reference version {reference_dn} at {reference_path} \
+        does not contain required multiallelism.tsv file'
+    true_multi_targets = pd.read_csv(f'{reference_path}/multiallelism.tsv', sep='\t')
 
-    return(ref_hap_df, af_c, af_i, af_f)
+
+    return(ref_hap_df, af_c, af_i, af_f, true_multi_targets)
 
 def construct_kmer_dict(k):
     '''
@@ -136,8 +140,6 @@ def parse_seqid(seqid_s):
     except:
         raise Exception('Dataframe contains seqids which cannot be converted to integers')
     return(parsed_seqid)
-
-
 
 def identify_error_seqs(mosq_hap_df, kmers, k, error_snps = 2):
     '''
@@ -229,13 +231,13 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af
     #Make result tables into dataframes
     rc = np.nansum(res_coarse, axis=0)/np.sum(np.nansum(res_coarse, axis=0), axis=1)[:,None]
     result_coarse = pd.DataFrame(rc, index=test_samples, columns=ref_hap_df.coarse_sgp.cat.categories)
-    result_coarse.to_csv(f"{outdir}/assignment_coarse.csv")
+    result_coarse.to_csv(f"{outdir}/assignment_coarse.tsv", sep='\t')
     ri = np.nansum(res_int, axis=0)/np.sum(np.nansum(res_int, axis=0), axis=1)[:,None]
     result_intermediate = pd.DataFrame(ri, index=test_samples, columns=ref_hap_df.intermediate_sgp.cat.categories)
-    result_intermediate.to_csv(f"{outdir}/assignment_intermediate.csv")
+    result_intermediate.to_csv(f"{outdir}/assignment_intermediate.tsv", sep='\t')
     rf = np.nansum(res_fine, axis=0)/np.sum(np.nansum(res_fine, axis=0), axis=1)[:,None]
     result_fine = pd.DataFrame(rf, index=test_samples, columns=ref_hap_df.fine_sgp.cat.categories)
-    result_fine.to_csv(f"{outdir}/assignment_fine.csv")
+    result_fine.to_csv(f"{outdir}/assignment_fine.tsv", sep='\t')
         
     return(result_coarse, result_intermediate, result_fine, test_samples)
 
@@ -244,6 +246,7 @@ def recompute_coverage(comb_stats_df, non_error_hap_df):
     recompute coverage stats after filtering and error removal
     '''
     logging.info('recompute coverage stats')
+    comb_stats_df.set_index('sample_id', inplace=True)
 
     #recompute multiallelic calls after filtering and error removal
     comb_stats_df['multiallelic_mosq_targets'] = (non_error_hap_df.groupby('sample_id')['target'].value_counts() > 2 \
@@ -251,29 +254,30 @@ def recompute_coverage(comb_stats_df, non_error_hap_df):
     comb_stats_df['multiallelic_mosq_targets'] = comb_stats_df['multiallelic_mosq_targets'].fillna(0)
 
     #recompute read counts after filtering and error removal
-    comb_stats_df['mosq_reads'] = non_error_hap_df[non_error_hap_df.target.isin(MOSQ_TARGETS)] \
-        .groupby('sample_id')['reads'].sum()
+    comb_stats_df['mosq_reads'] = non_error_hap_df.groupby('sample_id')['reads'].sum()
     comb_stats_df['mosq_reads'] = comb_stats_df['mosq_reads'].fillna(0)
 
     #recompute targets recovered after filtering and error removal
-    comb_stats_df['mosq_targets_recovered'] = non_error_hap_df[non_error_hap_df.target.isin(MOSQ_TARGETS)] \
-        .groupby('sample_id')['target'].nunique()
+    comb_stats_df['mosq_targets_recovered'] = non_error_hap_df.groupby('sample_id')['target'].nunique()
     comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].fillna(0)
+
+    comb_stats_df.reset_index(inplace=True)
 
     return(comb_stats_df)
 
-
-
-def estimate_contamination(comb_stats_df, non_error_hap_df):
+def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets):
     '''
     estimate contamination from read counts and multiallelic targets
     '''
     logging.info('estimating contamination risk')
 
-    #Exceptions -- target 32 for funestus
-    funestus_32 = non_error_hap_df[(non_error_hap_df.sample_id.isin(comb_stats_df.loc[comb_stats_df.res_fine=='Anopheles_funestus'])) & \
-        (non_error_hap_df.target==32)].groupby('sample_id')['seqid'].nunique()
-    comb_stats_df.loc[comb_stats_df.sample_id.isin(funestus_32[funestus_32>2]), 'multiallelic_mosq_targets'] -= 1
+    #Read in exceptions from true_multi_targets file
+    for idx, item in true_multi_targets.iterrows():
+        potentially_affected_samples = comb_stats_df.loc[comb_stats_df[f'res_{item.level}'] == item.sgp, 'sample_id']
+        affected_samples = non_error_hap_df.query('sample_id in @potentially_affected_samples & target == @item.target') \
+            .groupby('sample_id').filter(lambda x: x['seqid'].nunique() > 2 & \
+                                         x['seqid'].nunique() < item.admissable_alleles)['sample_id'].unique()
+        comb_stats_df.loc[comb_stats_df.sample_id.isin(affected_samples), 'multiallelic_mosq_targets'] -= 1
 
     comb_stats_df.loc[comb_stats_df.multiallelic_mosq_targets>2, 'contamination_risk'] = 'high'
     comb_stats_df.loc[((comb_stats_df.multiallelic_mosq_targets>0) & (comb_stats_df.multiallelic_mosq_targets<=2)) |\
@@ -285,7 +289,8 @@ def estimate_contamination(comb_stats_df, non_error_hap_df):
 
     return(comb_stats_df)
 
-def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_coarse, result_int, result_fine):
+def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_coarse, \
+                        result_int, result_fine, true_multi_targets):
 
     logging.info('generating NN calls from assignment info')
 
@@ -297,7 +302,7 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_co
         adict = dict(result.loc[(result>=.8).any(axis=1)].apply(lambda row: result.columns[row>=0.8][0], axis=1))
         comb_stats_df[rescol] = comb_stats_df.sample_id.map(adict)
 
-    comb_stats_df = estimate_contamination(comb_stats_df, non_error_hap_df)
+    comb_stats_df = estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets)
 
     return(comb_stats_df)
 
@@ -318,7 +323,8 @@ def nn(args):
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
     mosq_hap_df = prep_mosquito_haps(hap_df)
 
-    ref_hap_df, af_c, af_i, af_f = prep_reference_index(args.reference, path_to_refversion=args.path_to_refversion)
+    ref_hap_df, af_c, af_i, af_f, true_multi_targets = prep_reference_index(\
+        args.reference, path_to_refversion=args.path_to_refversion)
 
     kmers = construct_unique_kmer_table(mosq_hap_df, k=8)
     ref_kmers = construct_unique_kmer_table(ref_hap_df, k=8)
@@ -336,7 +342,7 @@ def nn(args):
         af_c, af_i, af_f, args.outdir)
 
     comb_stats_df = generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, \
-        result_coarse, result_int, result_fine)
+        result_coarse, result_int, result_fine, true_multi_targets)
 
     logging.info(f'writing assignment results to {args.outdir}')
     comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
