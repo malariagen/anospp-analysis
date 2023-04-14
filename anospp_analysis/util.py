@@ -259,13 +259,13 @@ def combine_stats(stats_df, hap_df, samples_df):
     comb_stats_df['targets_recovered'] = hap_df.groupby('sample_id') \
         ['target'].nunique()
     comb_stats_df['targets_recovered'] = comb_stats_df['targets_recovered'].fillna(0)
-    comb_stats_df['mosq_targets_recovered'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
+    comb_stats_df['raw_mosq_targets_recovered'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['target'].nunique()
-    comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].fillna(0)
-    comb_stats_df['mosq_reads'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
+    comb_stats_df['raw_mosq_targets_recovered'] = comb_stats_df['raw_mosq_targets_recovered'].fillna(0)
+    comb_stats_df['raw_mosq_reads'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['reads'].sum()
-    comb_stats_df['mosq_reads'] = comb_stats_df['mosq_reads'].fillna(0)
-    comb_stats_df['mosq_log10_reads'] = comb_stats_df['mosq_reads'] \
+    comb_stats_df['raw_mosq_reads'] = comb_stats_df['raw_mosq_reads'].fillna(0)
+    comb_stats_df['raw_mosq_log10_reads'] = comb_stats_df['raw_mosq_reads'] \
         .replace(0,0.1).apply(lambda x: np.log10(x))
     for pt in PLASM_TARGETS:
         comb_stats_df[f'{pt}_reads'] = hap_df[hap_df.target == pt] \
@@ -273,8 +273,6 @@ def combine_stats(stats_df, hap_df, samples_df):
         comb_stats_df[f'{pt}_reads'] = comb_stats_df[f'{pt}_reads'].fillna(0)
         comb_stats_df[f'{pt}_log10_reads'] = comb_stats_df[f'{pt}_reads'] \
             .replace(0,0.1).apply(lambda x: np.log10(x))
-    comb_stats_df['multiallelic_targets'] = (hap_df.groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
-    comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0)
     comb_stats_df['raw_multiallelic_mosq_targets'] = (hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
     comb_stats_df['raw_multiallelic_mosq_targets'] = comb_stats_df['raw_multiallelic_mosq_targets'].fillna(0)
