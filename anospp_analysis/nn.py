@@ -108,21 +108,22 @@ def construct_unique_kmer_table(mosq_hap_df, k):
 
     logging.info('translating unique sequences to k-mers')
 
-    maxallele = mosq_hap_df.groupby('target')['seqid'].nunique().max()
     kmerdict = construct_kmer_dict(k)
-    
+    #subset to unique haplotypes
     uniqueseq = mosq_hap_df[['seqid', 'consensus']].drop_duplicates()
+    #determine shape of table by highest seqid
+    parsed_seqid = parse_seqid(uniqueseq.seqid)
+    maxid = parsed_seqid[1].max()+1
 
-    table = np.zeros((len(MOSQ_TARGETS), maxallele, 4**k), dtype='int')
-    for r in uniqueseq.index:
-        seqid = str.split(uniqueseq.loc[r,'seqid'], '-')
-        try:
-            t, u = int(seqid[0]), int(seqid[1])
-        except:
-            raise Exception(f'seqid not recognised: {seqid}')
-        sq = uniqueseq.loc[r,'consensus']
-        for i in np.arange(len(sq)-(k-1)):
-            table[t,u,kmerdict[sq[i:i+k]]] += 1
+    #initiate table to store kmer counts
+    table = np.zeros((len(MOSQ_TARGETS), maxid, 4**k), dtype='int')
+    #translate each unique haplotype to kmer counts
+    for idx, seq in uniqueseq.iterrows():
+        tgt = parsed_seqid.loc[idx,0]
+        id = parsed_seqid.loc[idx,1]
+        consensus = seq.consensus
+        for i in np.arange(len(consensus)-(k-1)):
+            table[tgt,id,kmerdict[consensus[i:i+k]]] += 1
     return(table)
 
 def parse_seqid(seqid_s):
@@ -170,26 +171,43 @@ def identify_error_seqs(mosq_hap_df, kmers, k, error_snps = 2):
     logging.info(f'identified {len(error_seqs)} error sequences')
 
     return(error_seqs)
-                        
+
+def compute_kmer_distance(kmers, ref_kmers, tgt, qidx, refidx):
+    '''
+    compute k-mer distance between query kmer count
+    and ref kmer count(s)
+    returns absolute and normalised distance
+    '''
+    #identify k-mer mismatches
+    diff = np.abs(ref_kmers[tgt, refidx, :] - kmers[tgt, qidx, :])
+    total = np.sum(ref_kmers[tgt, refidx, :] + kmers[tgt, qidx, :], axis=1)
+    #sum to get absolute distance
+    dist = np.sum(diff, axis=1)
+    #normalise
+    norm_dist = dist / total
+
+    return(dist, norm_dist)
+
 def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
     '''
     identify the nearest neighbours of the unique haplotypes in the reference dataset 
     '''
-    maxima = ref_hap_df.groupby('target')['seqid'].nunique()
+    #get idxs occupied for each target
+    parsed_ref_seqids = parse_seqid(ref_hap_df.seqid.drop_duplicates())
+    ref_idxs_per_target = parsed_ref_seqids.groupby(0)[1].unique()
 
     nndict = dict()
 
     logging.info(f"identifying nearest neighbours for {non_error_hap_df.seqid.nunique()} unique haplotypes")
     
-    for seqid in non_error_hap_df.seqid.unique():
-        t, c = int(seqid.split('-')[0]), int(seqid.split('-')[1])
-        #Compute difference between target and references, with length correction
-        a = np.sum(np.abs(ref_kmers[t,:int(maxima[t]),:] - kmers[t,c,:]), axis=1)/ np.sum((
-            ref_kmers[t,:int(maxima[t]),:] + kmers[t,c,:]), axis=1)
+    unique_seqids = non_error_hap_df.seqid.unique()
+    for seqid in unique_seqids:
+        tgt, qidx = parse_seqid(seqid).loc[0,0], parse_seqid(seqid).loc[0,1]
+        dist, norm_dist = compute_kmer_distance(kmers, ref_kmers, tgt, qidx, ref_idxs_per_target[tgt])
         #Find nearest neighbours
-        cbn = np.arange(int(maxima[t]))[a==a.min()]
+        nn_qidx = ref_idxs_per_target[tgt][norm_dist==norm_dist.min()]
         #include in dict
-        nndict[seqid] = (cbn, a.min())
+        nndict[seqid] = (nn_qidx, norm_dist.min())
 
     return(nndict)
 
