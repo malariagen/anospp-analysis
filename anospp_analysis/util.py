@@ -76,6 +76,10 @@ def lims_well_id_mapper():
     return lims_well_ids
 
 def seqid_generator(hap_df):
+    '''
+    assign identifyer to unique haplotypes
+    used in nn/construct_unique_kmer_table
+    '''
 
     seqids = dict()
     for tgt, group in hap_df.groupby('target'):
