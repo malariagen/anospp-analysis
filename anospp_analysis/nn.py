@@ -214,7 +214,7 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, test_samples, nn
             #for each haplotype
             for allele in alleles:
                 #lookup the nearest neighbour identifiers
-                nnids = nndict[allele]
+                nnids = nndict[allele][0]
                 #for each assignment level
                 for table, lookup in zip([res_fine, res_int, res_coarse], [af_f, af_i, af_c]):
                     #get the (summed) allele frequences of the nearest neighbours
@@ -303,6 +303,9 @@ def nn(args):
     non_error_hap_df.to_csv(f'{args.outdir}/non_error_haplotypes.tsv', index=False, sep='\t')
     
     nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
+    nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
+    nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
+    nn_df[['nn_id', 'nn_dist']].to_csv(f'{args.outdir}/nn_dictionary.tsv', sep='\t')
 
     result_coarse, result_int, result_fine = perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, test_samples, nndict, \
         af_c, af_i, af_f, args.outdir)
