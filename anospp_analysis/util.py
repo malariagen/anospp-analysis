@@ -275,9 +275,9 @@ def combine_stats(stats_df, hap_df, samples_df):
             .replace(0,0.1).apply(lambda x: np.log10(x))
     comb_stats_df['multiallelic_targets'] = (hap_df.groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
     comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0)
-    comb_stats_df['multiallelic_mosq_targets'] = (hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
+    comb_stats_df['raw_multiallelic_mosq_targets'] = (hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
-    comb_stats_df['multiallelic_mosq_targets'] = comb_stats_df['multiallelic_mosq_targets'].fillna(0)
+    comb_stats_df['raw_multiallelic_mosq_targets'] = comb_stats_df['raw_multiallelic_mosq_targets'].fillna(0)
     comb_stats_df.reset_index(inplace=True)
         
     return comb_stats_df
