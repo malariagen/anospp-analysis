@@ -29,7 +29,7 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
 
     return(mosq_hap_df)
 
-def prep_reference_index(reference_dn, path_to_refversion='test_data'):
+def prep_reference_index(reference_dn, path_to_refversion):
     '''
     Read in standardised reference index files from database (currently directory)
     '''
@@ -84,8 +84,23 @@ def prep_reference_index(reference_dn, path_to_refversion='test_data'):
         does not contain required multiallelism.tsv file'
     true_multi_targets = pd.read_csv(f'{reference_path}/multiallelism.tsv', sep='\t')
 
+    if not os.path.isfile(f'{reference_path}/colors_coarse.npy'):
+        logging.warning('No colors defined for plotting.')
+    else:
+        colors_coarse = np.load(f'{reference_path}/colors_coarse.npy')
+    if not os.path.isfile(f'{reference_path}/colors_int.npy'):
+        logging.warning('No colors defined for plotting.')
+    else:
+        colors_int = np.load(f'{reference_path}/colors_int.npy')
+    if not os.path.isfile(f'{reference_path}/colors_fine.npy'):
+        logging.warning('No colors defined for plotting.')
+    else:
+        colors_fine = np.load(f'{reference_path}/colors_fine.npy')
+        
 
-    return(ref_hap_df, af_c, af_i, af_f, true_multi_targets)
+
+    return(ref_hap_df, af_c, af_i, af_f, true_multi_targets, \
+           colors_coarse, colors_int, colors_fine)
 
 def construct_kmer_dict(k):
     '''
@@ -146,7 +161,7 @@ def parse_seqid(seqid_s):
         raise Exception('Dataframe contains seqids which cannot be converted to integers')
     return(parsed_seqid)
 
-def identify_error_seqs(mosq_hap_df, kmers, k, error_snps = 2):
+def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     '''
     Identify haplotypes resulting from sequencing/PCR errors
     Cannot distinguish between true heterozygote, contaminated homozygote and homozygote with error sequence
@@ -155,7 +170,7 @@ def identify_error_seqs(mosq_hap_df, kmers, k, error_snps = 2):
 
     logging.info('identifying haplotypes resulting from sequencing/PCR errors')
     #set the k-mer threshold for the number of snps allowed for errors
-    threshold=error_snps*k+1
+    threshold=n_error_snps*k+1
     seqid_size = mosq_hap_df.groupby('seqid').size()
     singleton_seqids = seqid_size[seqid_size==1].index
     error_candidates = mosq_hap_df.query('seqid in @singleton_seqids & nalleles>2')
@@ -346,6 +361,22 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_co
 
     return(comb_stats_df)
 
+def plot_assignment_proportions(result, level, colors, nn_asgn_threshold):
+    
+    logging.info(f'Generate {level} level plots')
+    #Generate bar plots at given assignment level
+    fig, ax = plt.subplots(figsize=(20,7))
+    result.plot(kind='bar', stacked=True, width=1, ax=ax, color=colors)
+    ax.set_xticklabels('')
+    ax.set_xticks([])
+    ax.set_title(f"{level} level assignment")
+    ax.hlines(float(nn_asgn_threshold), -.5, result.shape[0]-.5, color='k', ls = ':', linewidth=1)
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0+3/7*box.height, box.width, box.height*4/7])
+    leg1 = ax.legend(loc='upper center', ncol=7, bbox_to_anchor=(0.5, -.05), fontsize=8.7)
+    ax.margins(y=0)
+    return(fig, ax)
+
 
 def nn(args):
 
@@ -363,13 +394,14 @@ def nn(args):
     mosq_hap_df = prep_mosquito_haps(hap_df, args.hap_read_count_threshold, \
                                      args.hap_reads_fraction_threshold)
 
-    ref_hap_df, af_c, af_i, af_f, true_multi_targets = prep_reference_index(\
+    ref_hap_df, af_c, af_i, af_f, true_multi_targets, \
+        colors_coarse, colors_int, colors_fine = prep_reference_index(\
         args.reference, path_to_refversion=args.path_to_refversion)
 
-    kmers = construct_unique_kmer_table(mosq_hap_df, k=8)
-    ref_kmers = construct_unique_kmer_table(ref_hap_df, k=8)
+    kmers = construct_unique_kmer_table(mosq_hap_df, int(args.kmer_length))
+    ref_kmers = construct_unique_kmer_table(ref_hap_df, int(args.kmer_length))
 
-    error_seqs = identify_error_seqs(mosq_hap_df, kmers, k=8)
+    error_seqs = identify_error_seqs(mosq_hap_df, kmers, int(args.kmer_length), int(args.n_error_snps))
     non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
     non_error_hap_df.to_csv(f'{args.outdir}/non_error_haplotypes.tsv', index=False, sep='\t')
     
@@ -391,6 +423,13 @@ def nn(args):
 
     logging.info(f'writing assignment results to {args.outdir}')
     comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
+
+    for result, level, colors in zip([result_coarse, result_int, result_fine], \
+                             ['coarse', 'intermediate', 'fine'], [colors_coarse, \
+                                                colors_int, colors_fine]):
+        fig, _ = plot_assignment_proportions(result, level, colors, args.nn_assignment_threshold)
+        fig.savefig(f'{args.outdir}/{level}_assignment.png')
+
     logging.info('All done!')
 
     
@@ -404,6 +443,8 @@ def main():
          Default: nn1.0', default='nn1.0')
     parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
          Default: test_data', default='test_data')
+    parser.add_argument('--no_plotting', help='Do not generate plots. Default: False', \
+                        default=False)
     parser.add_argument('--hap_read_count_threshold', help='minimum number of reads for supported haplotypes. \
          Default: 10', default=10)
     parser.add_argument('--hap_reads_fraction_threshold', help='minimum fraction of reads for supported haplotypes. \
@@ -416,6 +457,11 @@ def main():
                         of multiallelic targets get high contamination risk. Default: 2', default=2)
     parser.add_argument('--nn_assignment_threshold', help='required fraction for calling assignment. \
                         Default: 0.8', default=0.8)
+    parser.add_argument('--n_error_snps', help='Maximum number of snps for a multi-allelic sequence to be \
+                        considered a sequencing or PCR error. Default: 2', default=2)
+    parser.add_argument('-k', 'kmer_length', help='Length of k-mers to use. Note that NNoVAE has been developed \
+                        and tested for k=8, so accuracy of results cannot be guaranteed with other values of k. \
+                        Default: k=8', default=8)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: nn', default='nn')
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
