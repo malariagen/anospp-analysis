@@ -27,6 +27,9 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     mosq_hap_df = filtered_hap_df[filtered_hap_df.target.isin(MOSQ_TARGETS)]
     mosq_hap_df = mosq_hap_df.astype({'target': int})
 
+    #recompute reads coverage after filtering
+    mosq_hap_df = recompute_haplotype_coverage(mosq_hap_df)
+
     return(mosq_hap_df)
 
 def prep_reference_index(reference_dn, path_to_refversion):
@@ -191,6 +194,18 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
 
     return(error_seqs)
 
+def recompute_haplotype_coverage(hap_df):
+    hap_df = hap_df.drop(["total_reads", "reads_fraction", "nalleles"], axis=1)
+
+    hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['reads'].transform('sum')
+
+    hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
+
+    hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['consensus'].transform('nunique')
+    return(hap_df)
+
 def compute_kmer_distance(kmers, ref_kmers, tgt, qidx, refidx):
     '''
     compute k-mer distance between query kmer count
@@ -232,7 +247,8 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
 
     return(nndict)
 
-def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f):
+def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f,\
+                                  normalisation):
     '''
     The main NN assignment function
     it outputs three dataframes containing the assignment proportions to each species-group for the three levels
@@ -254,14 +270,20 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af
         #Per amplified target
         for tgt in targets:
             #Identify the unique IDs of the focal sample's haplotypes at target t
-            alleles = non_error_hap_df.loc[(non_error_hap_df.sample_id == smp) & (non_error_hap_df.target == tgt), 'seqid']
+            alleles = non_error_hap_df.loc[(non_error_hap_df.sample_id == smp) & (non_error_hap_df.target == tgt), ['seqid', 'reads_fraction']]
             #for each haplotype
-            for allele in alleles:
+            for _, allele in alleles.iterrows():
                 #for each assignment level
                 for table, lookup in zip([res_fine, res_int, res_coarse], [af_f, af_i, af_c]):
+                    if normalisation == 'n_alleles':
                     #lookup assignment proportion
-                    assignment_proportion = lookup_assignment_proportion(allele, lookup, \
-                                                    tgt, nndict, len(alleles))
+                        assignment_proportion = lookup_assignment_proportion(allele.seqid, lookup, \
+                                                    tgt, nndict, 1/alleles.shape[0])
+                    elif normalistion == 'reads_fraction':
+                        assignment_proportion = lookup_assignment_proportion(allele.seqid, lookup, \
+                                                    tgt, nndict, allele.reads_fraction)
+                    else:
+                        logging.error("Not a valid allelism_normalisation method.")
                     table[tgt,nsmp,:] += assignment_proportion
     
     #Average assignment results over amplified targets
@@ -275,7 +297,7 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af
         
     return(result_coarse, result_int, result_fine, test_samples)
 
-def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, nalleles=1):
+def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, weight=1):
 
     #lookup nearest neighbour identifiers
     nnids = nndict[q_seqid][0]
@@ -283,11 +305,11 @@ def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, nalle
     af_nn = allele_frequencies[tgt, nnids, :]
     #sum allele frequencies over nnids
     summed_af_nn = np.sum(af_nn, axis=0)
-    #normalise proportion and factor in number of alleles
-    assignment_proportion = (1/nalleles)*summed_af_nn/np.sum(summed_af_nn)
+    #normalise proportion and weigth in number of alleles
+    assignment_proportion = weight*summed_af_nn/np.sum(summed_af_nn)
     return(assignment_proportion)
 
-def recompute_coverage(comb_stats_df, non_error_hap_df):
+def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
     '''
     recompute coverage stats after filtering and error removal
     '''
@@ -344,7 +366,7 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_co
     logging.info('generating NN calls from assignment info')
 
     #Account for filtering and error removal
-    comb_stats_df = recompute_coverage(comb_stats_df, non_error_hap_df)
+    comb_stats_df = recompute_sample_coverage(comb_stats_df, non_error_hap_df)
 
     #Record whether NN assignment was performed
     comb_stats_df.loc[comb_stats_df.sample_id.isin(test_samples), 'NN_assignment'] = 'yes'
@@ -403,6 +425,7 @@ def nn(args):
 
     error_seqs = identify_error_seqs(mosq_hap_df, kmers, int(args.kmer_length), int(args.n_error_snps))
     non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
+    non_error_hap_df = recompute_haplotype_coverage(non_error_hap_df)
     non_error_hap_df.to_csv(f'{args.outdir}/non_error_haplotypes.tsv', index=False, sep='\t')
     
     nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
@@ -411,24 +434,26 @@ def nn(args):
     nn_df[['nn_id', 'nn_dist']].to_csv(f'{args.outdir}/nn_dictionary.tsv', sep='\t')
 
     result_coarse, result_int, result_fine, test_samples = perform_nn_assignment_samples(\
-        non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f)
+        non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f, args.allelism_normalisation)
     result_coarse.to_csv(f"{args.outdir}/assignment_coarse.tsv", sep='\t')
     result_int.to_csv(f"{args.outdir}/assignment_intermediate.tsv", sep='\t')
     result_fine.to_csv(f"{args.outdir}/assignment_fine.tsv", sep='\t')
 
     comb_stats_df = generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, \
         result_coarse, result_int, result_fine, true_multi_targets, args.nn_assignment_threshold, \
-            args.medium_contamination_read_count_threshold, args.medium_contamination_multi_allelic_threshold, \
+            args.medium_contamination_read_count_threshold, \
+            args.medium_contamination_multi_allelic_threshold, \
             args.high_contamination_multi_allelic_threshold)
 
     logging.info(f'writing assignment results to {args.outdir}')
     comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
 
-    for result, level, colors in zip([result_coarse, result_int, result_fine], \
+    if not bool(args.no_plotting):
+        for result, level, colors in zip([result_coarse, result_int, result_fine], \
                              ['coarse', 'intermediate', 'fine'], [colors_coarse, \
                                                 colors_int, colors_fine]):
-        fig, _ = plot_assignment_proportions(result, level, colors, args.nn_assignment_threshold)
-        fig.savefig(f'{args.outdir}/{level}_assignment.png')
+            fig, _ = plot_assignment_proportions(result, level, colors, args.nn_assignment_threshold)
+            fig.savefig(f'{args.outdir}/{level}_assignment.png')
 
     logging.info('All done!')
 
@@ -445,6 +470,8 @@ def main():
          Default: test_data', default='test_data')
     parser.add_argument('--no_plotting', help='Do not generate plots. Default: False', \
                         default=False)
+    parser.add_argument('--allelism_normalisation', help='Normalisation method over multiple alleles. Options: \
+                         [n_alleles,reads_fraction]. Default: n_alleles', default='n_alleles')
     parser.add_argument('--hap_read_count_threshold', help='minimum number of reads for supported haplotypes. \
          Default: 10', default=10)
     parser.add_argument('--hap_reads_fraction_threshold', help='minimum fraction of reads for supported haplotypes. \
@@ -459,7 +486,7 @@ def main():
                         Default: 0.8', default=0.8)
     parser.add_argument('--n_error_snps', help='Maximum number of snps for a multi-allelic sequence to be \
                         considered a sequencing or PCR error. Default: 2', default=2)
-    parser.add_argument('-k', 'kmer_length', help='Length of k-mers to use. Note that NNoVAE has been developed \
+    parser.add_argument('-k', '--kmer_length', help='Length of k-mers to use. Note that NNoVAE has been developed \
                         and tested for k=8, so accuracy of results cannot be guaranteed with other values of k. \
                         Default: k=8', default=8)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: nn', default='nn')
