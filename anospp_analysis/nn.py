@@ -9,7 +9,7 @@ import itertools
 
 from .util import *
 
-def prep_mosquito_haps(hap_df):
+def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     '''
     prepare mosquito haplotype dataframe
     remove plasmodium haplotypes
@@ -20,7 +20,11 @@ def prep_mosquito_haps(hap_df):
     logging.info('preparing mosquito haplotypes')
 
     hap_df = hap_df.astype({'target': str})
-    mosq_hap_df = hap_df[hap_df.target.isin(MOSQ_TARGETS)]
+    filtered_hap_df = hap_df[(hap_df.reads>=int(rc_threshold)) & (hap_df.reads_fraction>=float(rf_threshold))]
+    if filtered_hap_df.shape[0] < hap_df.shape[0]:
+        logging.warning(f'Removed {hap_df.shape[0] - filtered_hap_df.shape[0]} haplotypes \
+                    with fewer than {rc_threshold} reads or lower fracion than {rf_threshold} of reads')
+    mosq_hap_df = filtered_hap_df[filtered_hap_df.target.isin(MOSQ_TARGETS)]
     mosq_hap_df = mosq_hap_df.astype({'target': int})
 
     return(mosq_hap_df)
@@ -292,7 +296,8 @@ def recompute_coverage(comb_stats_df, non_error_hap_df):
 
     return(comb_stats_df)
 
-def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets):
+def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets, \
+                           rc_med_threshold, ma_med_threshold, ma_hi_threshold):
     '''
     estimate contamination from read counts and multiallelic targets
     '''
@@ -306,9 +311,10 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets):
                                          x['seqid'].nunique() < item.admissable_alleles)['sample_id'].unique()
         comb_stats_df.loc[comb_stats_df.sample_id.isin(affected_samples), 'multiallelic_mosq_targets'] -= 1
 
-    comb_stats_df.loc[comb_stats_df.multiallelic_mosq_targets>2, 'contamination_risk'] = 'high'
-    comb_stats_df.loc[((comb_stats_df.multiallelic_mosq_targets>0) & (comb_stats_df.multiallelic_mosq_targets<=2)) |\
-        (comb_stats_df.mosq_reads<1000), 'contamination_risk'] = 'medium'
+    comb_stats_df.loc[comb_stats_df.multiallelic_mosq_targets>int(ma_hi_threshold), 'contamination_risk'] = 'high'
+    comb_stats_df.loc[((comb_stats_df.multiallelic_mosq_targets>int(ma_med_threshold)) & \
+                       (comb_stats_df.multiallelic_mosq_targets<=int(ma_hi_threshold))) |\
+        (comb_stats_df.mosq_reads<int(rc_med_threshold)), 'contamination_risk'] = 'medium'
     comb_stats_df.loc[comb_stats_df.contamination_risk.isnull(), 'contamination_risk'] = 'low'
 
     logging.info(f"Identified {(comb_stats_df.contamination_risk=='high').sum()} samples with high contamination risk \
@@ -317,19 +323,26 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets):
     return(comb_stats_df)
 
 def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_coarse, \
-                        result_int, result_fine, true_multi_targets):
+                        result_int, result_fine, true_multi_targets, nn_asgn_threshold, \
+                        rc_med_threshold, ma_med_threshold, ma_hi_threshold):
 
     logging.info('generating NN calls from assignment info')
 
+    #Account for filtering and error removal
     comb_stats_df = recompute_coverage(comb_stats_df, non_error_hap_df)
 
+    #Record whether NN assignment was performed
     comb_stats_df.loc[comb_stats_df.sample_id.isin(test_samples), 'NN_assignment'] = 'yes'
     comb_stats_df.loc[comb_stats_df.NN_assignment.isnull(), 'NN_assignment'] = 'no'
-    for result, rescol in zip([result_coarse, result_int, result_fine], ['res_coarse', 'res_int', 'res_fine']):
-        adict = dict(result.loc[(result>=.8).any(axis=1)].apply(lambda row: result.columns[row>=0.8][0], axis=1))
-        comb_stats_df[rescol] = comb_stats_df.sample_id.map(adict)
 
-    comb_stats_df = estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets)
+    #Generate assignment hard calls if the threshold is met
+    for result, rescol in zip([result_coarse, result_int, result_fine], ['res_coarse', 'res_int', 'res_fine']):
+        asgn_dict = dict(result.loc[(result>=float(nn_asgn_threshold)).any(axis=1)].apply(\
+            lambda row: result.columns[row>=float(nn_asgn_threshold)][0], axis=1))
+        comb_stats_df[rescol] = comb_stats_df.sample_id.map(asgn_dict)
+
+    comb_stats_df = estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets, \
+                                           rc_med_threshold, ma_med_threshold, ma_hi_threshold)
 
     return(comb_stats_df)
 
@@ -347,7 +360,8 @@ def nn(args):
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-    mosq_hap_df = prep_mosquito_haps(hap_df)
+    mosq_hap_df = prep_mosquito_haps(hap_df, args.hap_read_count_threshold, \
+                                     args.hap_reads_fraction_threshold)
 
     ref_hap_df, af_c, af_i, af_f, true_multi_targets = prep_reference_index(\
         args.reference, path_to_refversion=args.path_to_refversion)
@@ -364,14 +378,16 @@ def nn(args):
     nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
     nn_df[['nn_id', 'nn_dist']].to_csv(f'{args.outdir}/nn_dictionary.tsv', sep='\t')
 
-    result_coarse, result_int, result_fine, test_samples = perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, \
-        af_c, af_i, af_f)
+    result_coarse, result_int, result_fine, test_samples = perform_nn_assignment_samples(\
+        non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f)
     result_coarse.to_csv(f"{args.outdir}/assignment_coarse.tsv", sep='\t')
     result_int.to_csv(f"{args.outdir}/assignment_intermediate.tsv", sep='\t')
     result_fine.to_csv(f"{args.outdir}/assignment_fine.tsv", sep='\t')
 
     comb_stats_df = generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, \
-        result_coarse, result_int, result_fine, true_multi_targets)
+        result_coarse, result_int, result_fine, true_multi_targets, args.nn_assignment_threshold, \
+            args.medium_contamination_read_count_threshold, args.medium_contamination_multi_allelic_threshold, \
+            args.high_contamination_multi_allelic_threshold)
 
     logging.info(f'writing assignment results to {args.outdir}')
     comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
@@ -388,6 +404,18 @@ def main():
          Default: nn1.0', default='nn1.0')
     parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
          Default: test_data', default='test_data')
+    parser.add_argument('--hap_read_count_threshold', help='minimum number of reads for supported haplotypes. \
+         Default: 10', default=10)
+    parser.add_argument('--hap_reads_fraction_threshold', help='minimum fraction of reads for supported haplotypes. \
+         Default: 0.1', default=0.1)
+    parser.add_argument('--medium_contamination_read_count_threshold', help='samples with fewer than this number \
+                        of reads get medium contamination risk. Default: 1000', default=1000)
+    parser.add_argument('--medium_contamination_multi_allelic_threshold', help='samples with more than this number \
+                        of multiallelic targets get medium contamination risk. Default: 0', default=0)
+    parser.add_argument('--high_contamination_multi_allelic_threshold', help='samples with more than this number \
+                        of multiallelic targets get high contamination risk. Default: 2', default=2)
+    parser.add_argument('--nn_assignment_threshold', help='required fraction for calling assignment. \
+                        Default: 0.8', default=0.8)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: nn', default='nn')
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
