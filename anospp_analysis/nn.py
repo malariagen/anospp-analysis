@@ -200,9 +200,11 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
 
     logging.info(f"identifying nearest neighbours for {non_error_hap_df.seqid.nunique()} unique haplotypes")
     
+    #loop through unique haplotypes
     unique_seqids = non_error_hap_df.seqid.unique()
     for seqid in unique_seqids:
         tgt, qidx = parse_seqid(seqid).loc[0,0], parse_seqid(seqid).loc[0,1]
+        #compute distance between focal hap and all same target haps in ref index
         dist, norm_dist = compute_kmer_distance(kmers, ref_kmers, tgt, qidx, ref_idxs_per_target[tgt])
         #Find nearest neighbours
         nn_qidx = ref_idxs_per_target[tgt][norm_dist==norm_dist.min()]
@@ -211,7 +213,7 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
 
     return(nndict)
 
-def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f, outdir):
+def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f):
     '''
     The main NN assignment function
     it outputs three dataframes containing the assignment proportions to each species-group for the three levels
@@ -231,33 +233,40 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af
         targets = non_error_hap_df.loc[non_error_hap_df.sample_id == smp, 'target'].unique()
         
         #Per amplified target
-        for t in targets:
+        for tgt in targets:
             #Identify the unique IDs of the focal sample's haplotypes at target t
-            alleles = non_error_hap_df.loc[(non_error_hap_df.sample_id == smp) & (non_error_hap_df.target == t), 'seqid']
+            alleles = non_error_hap_df.loc[(non_error_hap_df.sample_id == smp) & (non_error_hap_df.target == tgt), 'seqid']
             #for each haplotype
             for allele in alleles:
-                #lookup the nearest neighbour identifiers
-                nnids = nndict[allele][0]
                 #for each assignment level
                 for table, lookup in zip([res_fine, res_int, res_coarse], [af_f, af_i, af_c]):
-                    #get the (summed) allele frequences of the nearest neighbours
-                    allele_freqs = lookup[t,nnids,:].sum(axis=0)
-                    #normalise such that per sample neighbour frequency is 2 (diploid)
-                    #and store in the results table
-                    table[t,nsmp,:] += (2/len(alleles))*allele_freqs/np.sum(allele_freqs)
+                    #lookup assignment proportion
+                    assignment_proportion = lookup_assignment_proportion(allele, lookup, \
+                                                    tgt, nndict, len(alleles))
+                    table[tgt,nsmp,:] += assignment_proportion
     
-    #Make result tables into dataframes
+    #Average assignment results over amplified targets
     rc = np.nansum(res_coarse, axis=0)/np.sum(np.nansum(res_coarse, axis=0), axis=1)[:,None]
-    result_coarse = pd.DataFrame(rc, index=test_samples, columns=ref_hap_df.coarse_sgp.cat.categories)
-    result_coarse.to_csv(f"{outdir}/assignment_coarse.tsv", sep='\t')
     ri = np.nansum(res_int, axis=0)/np.sum(np.nansum(res_int, axis=0), axis=1)[:,None]
-    result_intermediate = pd.DataFrame(ri, index=test_samples, columns=ref_hap_df.intermediate_sgp.cat.categories)
-    result_intermediate.to_csv(f"{outdir}/assignment_intermediate.tsv", sep='\t')
     rf = np.nansum(res_fine, axis=0)/np.sum(np.nansum(res_fine, axis=0), axis=1)[:,None]
+    #Convert results to dataframes
+    result_coarse = pd.DataFrame(rc, index=test_samples, columns=ref_hap_df.coarse_sgp.cat.categories)
+    result_int = pd.DataFrame(ri, index=test_samples, columns=ref_hap_df.intermediate_sgp.cat.categories)
     result_fine = pd.DataFrame(rf, index=test_samples, columns=ref_hap_df.fine_sgp.cat.categories)
-    result_fine.to_csv(f"{outdir}/assignment_fine.tsv", sep='\t')
         
-    return(result_coarse, result_intermediate, result_fine, test_samples)
+    return(result_coarse, result_int, result_fine, test_samples)
+
+def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, nalleles=1):
+
+    #lookup nearest neighbour identifiers
+    nnids = nndict[q_seqid][0]
+    #lookup allele frequencies of nnids
+    af_nn = allele_frequencies[tgt, nnids, :]
+    #sum allele frequencies over nnids
+    summed_af_nn = np.sum(af_nn, axis=0)
+    #normalise proportion and factor in number of alleles
+    assignment_proportion = (1/nalleles)*summed_af_nn/np.sum(summed_af_nn)
+    return(assignment_proportion)
 
 def recompute_coverage(comb_stats_df, non_error_hap_df):
     '''
@@ -325,7 +334,6 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_co
     return(comb_stats_df)
 
 
-
 def nn(args):
 
     setup_logging(verbose=args.verbose)
@@ -357,7 +365,10 @@ def nn(args):
     nn_df[['nn_id', 'nn_dist']].to_csv(f'{args.outdir}/nn_dictionary.tsv', sep='\t')
 
     result_coarse, result_int, result_fine, test_samples = perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, \
-        af_c, af_i, af_f, args.outdir)
+        af_c, af_i, af_f)
+    result_coarse.to_csv(f"{args.outdir}/assignment_coarse.tsv", sep='\t')
+    result_int.to_csv(f"{args.outdir}/assignment_intermediate.tsv", sep='\t')
+    result_fine.to_csv(f"{args.outdir}/assignment_fine.tsv", sep='\t')
 
     comb_stats_df = generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, \
         result_coarse, result_int, result_fine, true_multi_targets)
@@ -367,7 +378,6 @@ def nn(args):
     logging.info('All done!')
 
     
-
 def main():
     
     parser = argparse.ArgumentParser("NN assignment for ANOSPP sequencing data")
