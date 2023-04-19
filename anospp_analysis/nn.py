@@ -465,7 +465,7 @@ def main():
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
     parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
     parser.add_argument('-r', '--reference', help='Reference index version - currently a directory name.\
-         Default: nn1.0', default='nn1.0')
+         Default: nnv1', default='nnv1')
     parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
          Default: test_data', default='test_data')
     parser.add_argument('--no_plotting', help='Do not generate plots. Default: False', \
