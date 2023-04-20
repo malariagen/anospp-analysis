@@ -350,7 +350,7 @@ def run_blast(hap_data, target, workdir, run_ids, blastdb, filter_F1=10, filter_
             output.write(row['consensus'] + "\n")
 
     cmd = f"blastn -db {blastdb} \
-    -query work/comb_{run_ids}_{target}_hap.fasta -out work/comb_{run_ids}_{target}_hap.tsv -outfmt 6 \
+    -query {workdir}/comb_{run_ids}_{target}_hap.fasta -out {workdir}/comb_{run_ids}_{target}_hap.tsv -outfmt 6 \
     -word_size 5 -max_target_seqs 1 -evalue 0.01"
 
     process = subprocess.run(cmd.split(), capture_output=True, text=True)
@@ -643,8 +643,6 @@ def plasm(args):
         meta_df_all = pd.merge(samples_df, df_all, left_index =True, right_index=True, how='left')
 
         generate_plots(meta_df_all, haps_merged_df, args.workdir, run_id)
-
-        print(meta_df_all)
    
 
 
