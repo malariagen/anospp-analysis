@@ -47,63 +47,34 @@ def prep_reference_index(reference_version, path_to_refversion):
         does not contain required haplotypes.tsv file'
     ref_hap_df = pd.read_csv(f'{reference_path}/haplotypes.tsv', sep='\t')
 
-    assert os.path.isfile(f'{reference_path}/allele_freq_coarse.npy'), f'reference version {reference_version} at {reference_path} \
-        does not contain required allele_freq_coarse.npy file'
-    af_c = np.load(f'{reference_path}/allele_freq_coarse.npy')
-    assert os.path.isfile(f'{reference_path}/allele_freq_int.npy'), f'reference version {reference_version} at {reference_path} \
-        does not contain required allele_freq_int.npy file'
-    af_i = np.load(f'{reference_path}/allele_freq_int.npy')
-    assert os.path.isfile(f'{reference_path}/allele_freq_fine.npy'), f'reference version {reference_version} at {reference_path} \
-        does not contain required allele_freq_fine.npy file'
-    af_f = np.load(f'{reference_path}/allele_freq_fine.npy')
-
-    assert os.path.isfile(f'{reference_path}/sgp_coarse.txt'), f'reference version {reference_version} at {reference_path} \
-        does not contain required sgp_coarse.txt file'
-    sgp_c = []
-    with open(f'{reference_path}/sgp_coarse.txt', 'r') as fn:
-        for line in fn:
-            sgp_c.append(line.strip())
-
-    assert os.path.isfile(f'{reference_path}/sgp_int.txt'), f'reference version {reference_version} at {reference_path} \
-        does not contain required sgp_int.txt file'
-    sgp_i = []
-    with open(f'{reference_path}/sgp_int.txt', 'r') as fn:
-        for line in fn:
-            sgp_i.append(line.strip())
-
-    assert os.path.isfile(f'{reference_path}/sgp_fine.txt'), f'reference version {reference_version} at {reference_path} \
-        does not contain required sgp_fine.txt file'
-    sgp_f = []
-    with open(f'{reference_path}/sgp_fine.txt', 'r') as fn:
-        for line in fn:
-            sgp_f.append(line.strip())
-
-    
-    ref_hap_df['coarse_sgp'] = pd.Categorical(ref_hap_df['coarse_sgp'], sgp_c, ordered=True)
-    ref_hap_df['intermediate_sgp'] = pd.Categorical(ref_hap_df['intermediate_sgp'], sgp_i, ordered=True)
-    ref_hap_df['fine_sgp'] = pd.Categorical(ref_hap_df['fine_sgp'], sgp_f, ordered=True)
-
     assert os.path.isfile(f'{reference_path}/multiallelism.tsv'), f'reference version {reference_version} at {reference_path} \
         does not contain required multiallelism.tsv file'
     true_multi_targets = pd.read_csv(f'{reference_path}/multiallelism.tsv', sep='\t')
 
-    if not os.path.isfile(f'{reference_path}/colors_coarse.npy'):
-        logging.warning('No colors defined for plotting.')
-    else:
-        colors_coarse = np.load(f'{reference_path}/colors_coarse.npy')
-    if not os.path.isfile(f'{reference_path}/colors_int.npy'):
-        logging.warning('No colors defined for plotting.')
-    else:
-        colors_int = np.load(f'{reference_path}/colors_int.npy')
-    if not os.path.isfile(f'{reference_path}/colors_fine.npy'):
-        logging.warning('No colors defined for plotting.')
-    else:
-        colors_fine = np.load(f'{reference_path}/colors_fine.npy')
+    allele_freqs = dict()
+    colors = dict()
+    for level in ['coarse', 'int', 'fine']:
+        assert os.path.isfile(f'{reference_path}/allele_freq_{level}.npy'), f'reference version {reference_version} at {reference_path} \
+            does not contain required allele_freq_{level}.npy file'
+        af = np.load(f'{reference_path}/allele_freq_{level}.npy')
+        allele_freqs[level] = af
+
+        assert os.path.isfile(f'{reference_path}/sgp_{level}.txt'), f'reference version {reference_version} at {reference_path} \
+            does not contain required sgp_{level}.txt file'
+        sgp = []
+        with open(f'{reference_path}/sgp_{level}.txt', 'r') as fn:
+            for line in fn:
+                sgp.append(line.strip())
+
+        ref_hap_df[f'{level}_sgp'] = pd.Categorical(ref_hap_df[f'{level}_sgp'], sgp, ordered=True)
+
+        if not os.path.isfile(f'{reference_path}/colors_{level}.npy'):
+            logging.warning('No colors defined for plotting.')
+        else:
+            clr = np.load(f'{reference_path}/colors_{level}.npy')
+            colors[level] = clr
         
-
-
-    return(ref_hap_df, af_c, af_i, af_f, true_multi_targets, \
-           colors_coarse, colors_int, colors_fine)
+    return(ref_hap_df, allele_freqs, true_multi_targets, colors)
 
 def construct_kmer_dict(k):
     '''
@@ -247,7 +218,7 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
 
     return nndict
 
-def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f,\
+def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, allele_freqs,\
                                   normalisation):
     '''
     The main NN assignment function
@@ -259,9 +230,9 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af
     logging.info(f'performing NN assignment for {len(test_samples)} samples')
 
     #set up data-output as numpy arrays (will be made into dataframes later)
-    res_coarse = np.zeros((len(MOSQ_TARGETS), len(test_samples), af_c.shape[2]))
-    res_int = np.zeros((len(MOSQ_TARGETS), len(test_samples), af_i.shape[2]))
-    res_fine = np.zeros((len(MOSQ_TARGETS), len(test_samples), af_f.shape[2]))
+    results = dict({'coarse': np.zeros((len(MOSQ_TARGETS), len(test_samples), allele_freqs['coarse'].shape[2])), \
+                    'int': np.zeros((len(MOSQ_TARGETS), len(test_samples), allele_freqs['int'].shape[2])), \
+                    'fine': np.zeros((len(MOSQ_TARGETS), len(test_samples), allele_freqs['fine'].shape[2]))})
 
     for nsmp, smp in enumerate(test_samples):
         #Restrict to targets amplified in focal sample
@@ -274,28 +245,30 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af
             #for each haplotype
             for _, allele in alleles.iterrows():
                 #for each assignment level
-                for table, lookup in zip([res_fine, res_int, res_coarse], [af_f, af_i, af_c]):
+                for level in ['coarse', 'int', 'fine']:
                     if normalisation == 'n_alleles':
                     #lookup assignment proportion
-                        assignment_proportion = lookup_assignment_proportion(allele.seqid, lookup, \
+                        assignment_proportion = lookup_assignment_proportion(allele.seqid, allele_freqs[level], \
                                                     tgt, nndict, 1/alleles.shape[0])
-                    elif normalistion == 'reads_fraction':
-                        assignment_proportion = lookup_assignment_proportion(allele.seqid, lookup, \
+                    elif normalisation == 'reads_fraction':
+                        assignment_proportion = lookup_assignment_proportion(allele.seqid, allele_freqs[level], \
                                                     tgt, nndict, allele.reads_fraction)
                     else:
                         logging.error("Not a valid allelism_normalisation method.")
-                    table[tgt,nsmp,:] += assignment_proportion
-    
-    #Average assignment results over amplified targets
-    rc = np.nansum(res_coarse, axis=0)/np.sum(np.nansum(res_coarse, axis=0), axis=1)[:,None]
-    ri = np.nansum(res_int, axis=0)/np.sum(np.nansum(res_int, axis=0), axis=1)[:,None]
-    rf = np.nansum(res_fine, axis=0)/np.sum(np.nansum(res_fine, axis=0), axis=1)[:,None]
-    #Convert results to dataframes
-    result_coarse = pd.DataFrame(rc, index=test_samples, columns=ref_hap_df.coarse_sgp.cat.categories)
-    result_int = pd.DataFrame(ri, index=test_samples, columns=ref_hap_df.intermediate_sgp.cat.categories)
-    result_fine = pd.DataFrame(rf, index=test_samples, columns=ref_hap_df.fine_sgp.cat.categories)
-        
-    return(result_coarse, result_int, result_fine, test_samples)
+                    #table[tgt,nsmp,:] += assignment_proportion
+                    results[level][tgt,nsmp,:] += assignment_proportion
+
+    #print(f'shape of results arrays is {results_coarse.shape}, {results_int.shape} and {results_fine.shape}')
+    results_df = dict()
+    for level in ['coarse', 'int', 'fine']:
+        #Average assignment results over amplified targets
+        res = np.nansum(results[level], axis=0)/np.sum(np.nansum(results[level], axis=0), axis=1)[:,None]
+        #Convert results to dataframes
+        results_df[level] = pd.DataFrame(res, index=test_samples, columns=ref_hap_df[f'{level}_sgp'].cat.categories)
+    print(results_df['coarse'].iloc[:4])
+    print(results_df['int'].iloc[:4])
+    print(results_df['fine'].iloc[:4])    
+    return results_df, test_samples
 
 def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, weight=1):
 
@@ -359,8 +332,8 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets, 
 
     return comb_stats_df
 
-def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_coarse, \
-                        result_int, result_fine, true_multi_targets, nn_asgn_threshold, \
+def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_df, \
+                        true_multi_targets, nn_asgn_threshold, \
                         rc_med_threshold, ma_med_threshold, ma_hi_threshold):
 
     logging.info('generating NN calls from assignment info')
@@ -373,10 +346,10 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_co
     comb_stats_df.loc[comb_stats_df.NN_assignment.isnull(), 'NN_assignment'] = 'no'
 
     #Generate assignment hard calls if the threshold is met
-    for result, rescol in zip([result_coarse, result_int, result_fine], ['res_coarse', 'res_int', 'res_fine']):
-        asgn_dict = dict(result.loc[(result>=float(nn_asgn_threshold)).any(axis=1)].apply(\
-            lambda row: result.columns[row>=float(nn_asgn_threshold)][0], axis=1))
-        comb_stats_df[rescol] = comb_stats_df.sample_id.map(asgn_dict)
+    for level in ['coarse', 'int', 'fine']:
+        asgn_dict = dict(results_df[level].loc[(results_df[level]>=float(nn_asgn_threshold)).any(axis=1)].apply(\
+            lambda row: results_df[level].columns[row>=float(nn_asgn_threshold)][0], axis=1))
+        comb_stats_df[f'res_{level}'] = comb_stats_df.sample_id.map(asgn_dict)
 
     comb_stats_df = estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets, \
                                            rc_med_threshold, ma_med_threshold, ma_hi_threshold)
@@ -416,8 +389,8 @@ def nn(args):
     mosq_hap_df = prep_mosquito_haps(hap_df, args.hap_read_count_threshold, \
                                      args.hap_reads_fraction_threshold)
 
-    ref_hap_df, af_c, af_i, af_f, true_multi_targets, \
-        colors_coarse, colors_int, colors_fine = prep_reference_index(\
+    ref_hap_df, allele_freqs, true_multi_targets, \
+        colors = prep_reference_index(\
         args.reference_version, path_to_refversion=args.path_to_refversion)
 
     kmers = construct_unique_kmer_table(mosq_hap_df, int(args.kmer_length))
@@ -433,14 +406,13 @@ def nn(args):
     nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
     nn_df[['nn_id', 'nn_dist']].to_csv(f'{args.outdir}/nn_dictionary.tsv', sep='\t')
 
-    result_coarse, result_int, result_fine, test_samples = perform_nn_assignment_samples(\
-        non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f, args.allelism_normalisation)
-    result_coarse.to_csv(f"{args.outdir}/assignment_coarse.tsv", sep='\t')
-    result_int.to_csv(f"{args.outdir}/assignment_intermediate.tsv", sep='\t')
-    result_fine.to_csv(f"{args.outdir}/assignment_fine.tsv", sep='\t')
+    results_df, test_samples = perform_nn_assignment_samples(\
+        non_error_hap_df, ref_hap_df, nndict, allele_freqs, args.allelism_normalisation)
+    for level in ['coarse', 'int', 'fine']:
+        results_df[level].to_csv(f"{args.outdir}/assignment_{level}.tsv", sep='\t')
 
     comb_stats_df = generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, \
-        result_coarse, result_int, result_fine, true_multi_targets, args.nn_assignment_threshold, \
+        results_df, true_multi_targets, args.nn_assignment_threshold, \
             args.medium_contamination_read_count_threshold, \
             args.medium_contamination_multi_allelic_threshold, \
             args.high_contamination_multi_allelic_threshold)
@@ -449,16 +421,14 @@ def nn(args):
     comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
 
     if not bool(args.no_plotting):
-        for result, level, colors in zip([result_coarse, result_int, result_fine], \
-                             ['coarse', 'intermediate', 'fine'], [colors_coarse, \
-                                                colors_int, colors_fine]):
-            fig, _ = plot_assignment_proportions(result, level, colors, args.nn_assignment_threshold)
+        for level in ['coarse', 'int', 'fine']:
+            fig, _ = plot_assignment_proportions(results_df[level], level, colors[level], args.nn_assignment_threshold)
             fig.savefig(f'{args.outdir}/{level}_assignment.png')
 
     logging.info('All done!')
 
     
-def mai
+def main():
     
     parser = argparse.ArgumentParser("NN assignment for ANOSPP sequencing data")
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
