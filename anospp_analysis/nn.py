@@ -89,21 +89,32 @@ def construct_kmer_dict(k):
     kmerdict = dict(zip(labels, np.arange(4**k)))
     return kmerdict   
 
-def parse_seqid(seqid_s):
+def parse_seqid(seqid):
     '''
-    Parse seqids passed as a string or a pandas Series
+    Parse seqid passed as a string 
     '''
-    if isinstance(seqid_s, str):
-        parsed_seqid = pd.DataFrame([seqid_s.split('-')])
-    else:
-        parsed_seqid = seqid_s.str.split('-', expand=True)
-    
-    assert parsed_seqid[0].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
+    split_seqid = pd.DataFrame([seqid.split('-')])
+
+    assert split_seqid[0].isin(MOSQ_TARGETS).all(), f'seqid {seqid} refers to a non-mosquito target'
     try:
-        parsed_seqid = parsed_seqid.astype(int)
+        parsed_seqid = (int(split_seqid[0]), int(split_seqid[1]))
+    except:
+        raise Exception(f'seqid {seqid} cannot be converted to integers')
+    return parsed_seqid
+
+def parse_seqids_series(seqids):
+    '''
+    Parse seqid or seqids passed as a pandas Series
+    '''
+    parsed_seqids = seqids.str.split('-', expand=True)
+    parsed_seqids.columns = ['target', 'uidx']
+    
+    assert parsed_seqids[0].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
+    try:
+        parsed_seqids = parsed_seqids.astype(int)
     except:
         raise Exception('Dataframe contains seqids which cannot be converted to integers')
-    return parsed_seqid
+    return parsed_seqids
 
 def construct_unique_kmer_table(mosq_hap_df, k):
     '''
@@ -121,19 +132,19 @@ def construct_unique_kmer_table(mosq_hap_df, k):
     #subset to unique haplotypes
     uniqueseq = mosq_hap_df[['seqid', 'consensus']].drop_duplicates()
     #determine shape of table by highest seqid
-    parsed_seqids = parse_seqid(uniqueseq.seqid)
-    maxid = parsed_seqids[1].max()+1
+    parsed_seqids = parse_seqids_series(uniqueseq.seqid)
+    maxid = parsed_seqids['uidx'].max()+1
 
     #initiate table to store kmer counts
-    table = np.zeros((len(MOSQ_TARGETS), maxid, 4**k), dtype='int')
+    kmer_table = np.zeros((len(MOSQ_TARGETS), maxid, 4**k), dtype='int')
     #translate each unique haplotype to kmer counts
     for idx, seq in uniqueseq.iterrows():
         tgt = parsed_seqids.loc[idx,0]
         id = parsed_seqids.loc[idx,1]
         consensus = seq.consensus
         for i in np.arange(len(consensus)-(k-1)):
-            table[tgt,id,kmerdict[consensus[i:i+k]]] += 1
-    return table
+            kmer_table[tgt,id,kmerdict[consensus[i:i+k]]] += 1
+    return kmer_table
 
 def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     '''
@@ -147,15 +158,15 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     threshold=n_error_snps*k+1
     seqid_size = mosq_hap_df.groupby('seqid').size()
     singleton_seqids = seqid_size[seqid_size==1].index
-    error_candidates = mosq_hap_df.query('seqid in @singleton_seqids & nalleles>2')
+    error_candidates = mosq_hap_df.query('(seqid in @singleton_seqids) & (nalleles>2)')
 
     error_seqs = []
-    for idx, cand in error_candidates.iterrows():
-        possible_sources = mosq_hap_df.query('sample_id == @cand.sample_id & target == @cand.target & \
-                                             not seqid in @error_seqs & seqid != @cand.seqid')
+    for _, cand in error_candidates.iterrows():
+        possible_sources = mosq_hap_df.query('(sample_id == @cand.sample_id) & (target == @cand.target) & \
+                                             (not seqid in @error_seqs) & (seqid != @cand.seqid)')
         cand_parsed_seqid = parse_seqid(cand.seqid)
-        possible_sources_parsed_seqid = parse_seqid(possible_sources.seqid)
-        for possible_source in possible_sources_parsed_seqid[1]:
+        possible_sources_parsed_seqids = parse_seqids_series(possible_sources.seqid)
+        for possible_source in possible_sources_parsed_seqids['uidx']:
             abs_kmer_dist = np.abs(kmers[cand.target,cand_parsed_seqid[1],:] - kmers[cand.target,possible_source,:]).sum()
             if abs_kmer_dist<threshold:
                 error_seqs.append(cand.seqid)
@@ -198,8 +209,8 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
     identify the nearest neighbours of the unique haplotypes in the reference dataset 
     '''
     #get idxs occupied for each target
-    parsed_ref_seqids = parse_seqid(ref_hap_df.seqid.drop_duplicates())
-    ref_idxs_per_target = parsed_ref_seqids.groupby(0)[1].unique()
+    parsed_ref_seqids = parse_seqids_series(ref_hap_df.seqid.drop_duplicates())
+    ref_idxs_per_target = parsed_ref_seqids.groupby('target')['uidx'].unique()
 
     nndict = dict()
 
@@ -208,7 +219,7 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
     #loop through unique haplotypes
     unique_seqids = non_error_hap_df.seqid.unique()
     for seqid in unique_seqids:
-        tgt, qidx = parse_seqid(seqid).loc[0,0], parse_seqid(seqid).loc[0,1]
+        tgt, qidx = parse_seqid(seqid)
         #compute distance between focal hap and all same target haps in ref index
         dist, norm_dist = compute_kmer_distance(kmers, ref_kmers, tgt, qidx, ref_idxs_per_target[tgt])
         #Find nearest neighbours
@@ -217,6 +228,18 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
         nndict[seqid] = (nn_qidx, norm_dist.min())
 
     return nndict
+
+def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, weight=1):
+
+    #lookup nearest neighbour identifiers
+    nnids = nndict[q_seqid][0]
+    #lookup allele frequencies of nnids
+    af_nn = allele_frequencies[tgt, nnids, :]
+    #sum allele frequencies over nnids
+    summed_af_nn = np.sum(af_nn, axis=0)
+    #normalise proportion and weigth in number of alleles
+    assignment_proportion = weight*summed_af_nn/np.sum(summed_af_nn)
+    return assignment_proportion
 
 def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, allele_freqs,\
                                   normalisation):
@@ -264,23 +287,8 @@ def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, allele_f
         #Average assignment results over amplified targets
         res = np.nansum(results[level], axis=0)/np.sum(np.nansum(results[level], axis=0), axis=1)[:,None]
         #Convert results to dataframes
-        results_df[level] = pd.DataFrame(res, index=test_samples, columns=ref_hap_df[f'{level}_sgp'].cat.categories)
-    print(results_df['coarse'].iloc[:4])
-    print(results_df['int'].iloc[:4])
-    print(results_df['fine'].iloc[:4])    
+        results_df[level] = pd.DataFrame(res, index=test_samples, columns=ref_hap_df[f'{level}_sgp'].cat.categories)  
     return results_df, test_samples
-
-def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, weight=1):
-
-    #lookup nearest neighbour identifiers
-    nnids = nndict[q_seqid][0]
-    #lookup allele frequencies of nnids
-    af_nn = allele_frequencies[tgt, nnids, :]
-    #sum allele frequencies over nnids
-    summed_af_nn = np.sum(af_nn, axis=0)
-    #normalise proportion and weigth in number of alleles
-    assignment_proportion = weight*summed_af_nn/np.sum(summed_af_nn)
-    return assignment_proportion
 
 def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
     '''
