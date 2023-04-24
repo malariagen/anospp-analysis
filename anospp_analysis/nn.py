@@ -63,6 +63,14 @@ def prep_reference_index(reference_version, path_to_refversion):
         does not contain required multiallelism.tsv file'
     true_multi_targets = pd.read_csv(f'{reference_path}/multiallelism.tsv', sep='\t')
 
+    if os.path.isfile(f'{reference_path}/version.txt'):
+        with open(f'{reference_path}/version.txt', 'r') as fn:
+            for line in fn:
+                version_name = line.strip()
+    else:
+        logging.warning('No version.txt file present for reference version {reference_version} at {reference_path}')
+        version_name = 'unknown'
+
     allele_freqs = dict()
     colors = dict()
     for level in ['coarse', 'int', 'fine']:
@@ -86,7 +94,7 @@ def prep_reference_index(reference_version, path_to_refversion):
             clr = np.load(f'{reference_path}/colors_{level}.npy')
             colors[level] = clr
         
-    return(ref_hap_df, allele_freqs, true_multi_targets, colors)
+    return(ref_hap_df, allele_freqs, true_multi_targets, colors, version_name)
 
 def construct_kmer_dict(k):
     '''
@@ -121,7 +129,7 @@ def parse_seqids_series(seqids):
     parsed_seqids = seqids.str.split('-', expand=True)
     parsed_seqids.columns = ['target', 'uidx']
     
-    assert parsed_seqids[0].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
+    assert parsed_seqids['target'].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
     try:
         parsed_seqids = parsed_seqids.astype(int)
     except:
@@ -151,8 +159,8 @@ def construct_unique_kmer_table(mosq_hap_df, k):
     kmer_table = np.zeros((len(MOSQ_TARGETS), maxid, 4**k), dtype='int')
     #translate each unique haplotype to kmer counts
     for idx, seq in uniqueseq.iterrows():
-        tgt = parsed_seqids.loc[idx,0]
-        id = parsed_seqids.loc[idx,1]
+        tgt = parsed_seqids.loc[idx,'target']
+        id = parsed_seqids.loc[idx,'uidx']
         consensus = seq.consensus
         for i in np.arange(len(consensus)-(k-1)):
             kmer_table[tgt,id,kmerdict[consensus[i:i+k]]] += 1
@@ -365,6 +373,32 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
 
     return comb_stats_df
 
+def generate_summary(comb_stats_df, version_name):
+
+    summary = []
+    summary.append(f'Nearest Neighbour assignment using reference version {version_name}')
+    summary.append(f'On run containing {comb_stats_df.sample_id.nunique()} samples')
+    summary.append(f'{(comb_stats_df.contamination_risk=="high").sum()} samples have high contamination risk')
+    summary.append(f'{(comb_stats_df.contamination_risk=="medium").sum()} samples have medium contamination risk')
+    summary.append(f'{(comb_stats_df.contamination_risk=="low").sum()} samples have low contamination risk')
+    summary.append(f'{(comb_stats_df.NN_assignment=="no").sum()} samples with < 10 targets lack NN assignment')
+    summary.append(f'{(~comb_stats_df.res_coarse.isnull()).sum()} samples are assigned at coarse level')
+    summary.append(f'to {comb_stats_df.res_coarse.nunique()} different species groups')
+    summary.append(f'{(~comb_stats_df.res_int.isnull()).sum()} samples are assigned at intermediate level')
+    summary.append(f'to {comb_stats_df.res_int.nunique()} different species groups')
+    summary.append(f'{(~comb_stats_df.res_fine.isnull()).sum()} samples are assigned at fine level')
+    summary.append(f'to {comb_stats_df.res_fine.nunique()} different species groups')
+    summary.append(f'{comb_stats_df.loc[(comb_stats_df.NN_assignment=="yes") & (comb_stats_df.res_int.isnull()), "sample_id"].nunique()} \
+    samples with sufficient coverage could not be assigned at intermediate level')
+    summary.append(f'{comb_stats_df.loc[(comb_stats_df.NN_assignment=="yes") & (comb_stats_df.res_int.isnull()) & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} \
+    of those have medium or high contamination risk')
+    summary.append(f'{comb_stats_df.loc[(comb_stats_df.NN_assignment=="yes") & (comb_stats_df.res_coarse.isnull()), "sample_id"].nunique()} \
+    samples with sufficient coverage could not be assigned at coarse level')
+    summary.append(f'{comb_stats_df.loc[(comb_stats_df.NN_assignment=="yes") & (comb_stats_df.res_coarse.isnull()) & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} \
+    of those have medium or high contamination risk')
+    
+    return '\n'.join(summary)
+
 def plot_assignment_proportions(nn_level_result_df, level_label, colors, nn_asgn_threshold):
     
     logging.info(f'Generate {level_label} level plots')
@@ -396,12 +430,12 @@ def nn(args):
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-    logging.info(f'Starting NN assignment for {comb_stats.sample_id.nunique()} samples on current run')
+    logging.info(f'Starting NN assignment for {comb_stats_df.sample_id.nunique()} samples on current run')
     mosq_hap_df = prep_mosquito_haps(hap_df, args.hap_read_count_threshold, \
                                      args.hap_reads_fraction_threshold)
 
     ref_hap_df, allele_freqs, true_multi_targets, \
-        colors = prep_reference_index(\
+        colors, version_name = prep_reference_index(\
         args.reference_version, path_to_refversion=args.path_to_refversion)
 
     kmers = construct_unique_kmer_table(mosq_hap_df, int(args.kmer_length))
@@ -430,6 +464,11 @@ def nn(args):
 
     logging.info(f'writing assignment results to {args.outdir}')
     comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
+    
+    summary_text = generate_summary(comb_stats_df, version_name)
+    logging.info(f'writing summary file to {args.outdir}')
+    with open(f'{args.outdir}/summary.txt', 'w') as fn:
+        fn.write(summary_text)
 
     if not bool(args.no_plotting):
         for level in ['coarse', 'int', 'fine']:
