@@ -10,96 +10,10 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from .util import *
-
-###imports for bokeh
 from Bio import AlignIO
 from Bio import Phylo
-from bokeh.plotting import output_file, save
-# import panel as pn
-import bokeh.plotting as bk
-from bokeh.plotting import figure, output_file, show
-from bokeh.models import ColumnDataSource, Span, Range1d
-from bokeh.transform import factor_cmap
-from bokeh.layouts import gridplot, row, column
-from bokeh.models.glyphs import Text, Rect
-from bokeh.models.tools import HoverTool
-from bokeh.transform import dodge
 
-from bokeh.embed import components
-
-
-
-
-def view_alignment(aln, fontsize="9pt", plot_width=800):
-    """Bokeh sequence alignment view"""
-
-    def get_colors(seqs):
-        """make colors for bases in sequence"""
-        text = [i for s in list(seqs) for i in s]
-        clrs =  {'a':'red','t':'green','g':'orange','c':'blue','-':'white', 'n':'black'}
-        colors = [clrs[i] for i in text]
-        return colors
-
-    #make sequence and id lists from the aln object
-    seqs = [rec.seq for rec in (aln)]
-    ids = [rec.id for rec in aln]    
-    text = [i for s in list(seqs) for i in s]
-    colors = get_colors(seqs)    
-    N = len(seqs[0])
-    S = len(seqs)    
-    width = .4
-
-    x = np.arange(1,N+1)
-    y = np.arange(0,S,1)
-    #creates a 2D grid of coords from the 1D arrays
-    xx, yy = np.meshgrid(x, y)
-    #flattens the arrays
-    gx = xx.ravel()
-    gy = yy.flatten()
-    #use recty for rect coords with an offset
-    recty = gy+.5
-    h= 1/S
-    #now we can create the ColumnDataSource with all the arrays
-    source = ColumnDataSource(dict(x=gx, y=gy, recty=recty, text=text, colors=colors))
-    plot_height = len(seqs)*15+50
-    x_range = Range1d(0,N+1, bounds='auto')
-    if N>100:
-        viewlen=100
-    else:
-        viewlen=N
-    #view_range is for the close up view
-    view_range = (0,viewlen)
-    tools="xpan, xwheel_zoom, reset, save"
-
-    #entire sequence view (no text, with zoom)
-    p = figure(title=None, plot_width= plot_width, plot_height=50,
-               x_range=x_range, y_range=(0,S), tools=tools,
-               min_border=0, toolbar_location='below')
-    rects = Rect(x="x", y="recty",  width=1, height=1, fill_color="colors",
-                 line_color=None, fill_alpha=0.6)
-    p.add_glyph(source, rects)
-    p.yaxis.visible = False
-    p.grid.visible = False  
-
-    #sequence text view with ability to scroll along x axis
-    p1 = figure(title=None, plot_width=plot_width, plot_height=plot_height,
-                x_range=view_range, y_range=ids, tools="xpan,reset",
-                min_border=0, toolbar_location='below')#, lod_factor=1)          
-    glyph = Text(x="x", y="y", text="text", text_align='center',text_color="black",
-                text_font="monospace",text_font_size=fontsize)
-    rects = Rect(x="x", y="recty",  width=1, height=1, fill_color="colors",
-                line_color=None, fill_alpha=0.4)
-    p1.add_glyph(source, glyph)
-    p1.add_glyph(source, rects)
-
-    p1.grid.visible = False
-    p1.xaxis.major_label_text_font_style = "bold"
-    p1.yaxis.minor_tick_line_width = 0
-    p1.yaxis.major_tick_line_width = 0
-
-    p = gridplot([[p],[p1]], toolbar_location='below')
-    return p
+from .util import *
 
 def plot_lims_plate(df, target, plate, fname, reference, title=None, annot=True, cmap='coolwarm', center=None):
     """
@@ -121,6 +35,7 @@ def plot_lims_plate(df, target, plate, fname, reference, title=None, annot=True,
     #load colors
     if not os.path.isfile(f'{reference}/species_colours.csv'):
         logging.warning('No colors defined for plotting.')
+        colors_dict = {}
     else:
         colors = pd.read_csv(f'{reference}/species_colours.csv')
         colors_dict = dict(zip(colors['species'], colors['color']))
@@ -138,106 +53,6 @@ def plot_lims_plate(df, target, plate, fname, reference, title=None, annot=True,
     if fname is not None:
         plt.savefig(fname, dpi=300, bbox_inches='tight')
     plt.close(fig)
-
-def plot_plate_view(df, fname, target, reference, title=None):
-
-    """
-    Plots a plate map for a given plate and Plasmodium type.
-
-    Parameters:
-    df (pandas.DataFrame): The DataFrame to plot.
-    P (str): The Plasmodium type to plot the total reads for.
-    title (str): The title for the plot. Default is None.
-    plate (str): The name of the plate. Default is None.
-    annot (bool): Whether to annotate the heatmap with the values. Default is True.
-    cmap (str): The color map to use for the heatmap. Default is 'coolwarm'.
-    center (float): The center value for the color map. Default is None.
-
-    Returns:
-    None.
-    """
-
- 
-    # set the output filename
-    output_file(fname)
-
-    #extract the column and generate the row values
-    cols = list(map(str, sorted(df.lims_row.unique().tolist())))
-    rows = [str(x) for x in range(1, 25)]
-    df["species_count"] = df["species_count"].astype(str)
-    df["row"] = df["lims_col"].astype(str)
-    df["col"] = df["lims_row"].astype(str)
-
-    #remove all NaNs
-    df = df[df.species_count != "nan"]
-
-    #load the datframe into the source
-    source = ColumnDataSource(df)
-
-    #set up the figure
-    p = figure(width=1300, height=600, title=title,
-               x_range=rows, y_range=list(reversed(cols)), toolbar_location=None, tools=[HoverTool(), 'pan', 'wheel_zoom', 'reset'])
-
-    # add grid lines
-    for v in range(len(rows)):
-        vline = Span(location=v, dimension='height', line_color='black')
-        p.renderers.extend([vline])
-
-    for h in range(len(cols)):
-        hline = Span(location=h, dimension='width', line_color='black')
-        p.renderers.extend([hline])
-
-    #add the rectangles
-    # cmap = OrderedDict([("Plasmodium_falciparum", "red"), ("Plasmodium_vivax", "blue"), ("Plasmodium_malariae", "green")])
-    #load colors
-    if not os.path.isfile(f'{reference}/species_colours.csv'):
-        logging.warning('No colors defined for plotting.')
-    else:
-        colors = pd.read_csv(f'{reference}/species_colours.csv')
-        cmap = dict(zip(colors['species'], colors['color']))
-        # print(cmap)
-    p.rect("row", "col", 0.95, 0.95, source=source, fill_alpha=.9, legend_field="plasmodium_species",
-           color=factor_cmap('plasmodium_species', palette=list(cmap.values()), factors=list(cmap.keys())))
-
-    #add the species count text for each field
-    text_props = {"source": source, "text_align": "left", "text_baseline": "middle"}
-    x = dodge("row", -0.4, range=p.x_range)
-    if target == 'P1':
-        r = p.text(x=x, y="col", text="hap_ID_P1", **text_props, )
-
-    else:
-        r = p.text(x=x, y="col", text="hap_ID_P2", **text_props, )
-    r.glyph.text_font_size="10px"
-    r.glyph.text_font_style="bold"
-
-    #set up the hover value
-    p.add_tools(HoverTool(tooltips=[
-        ("sample id", "@{Source_sample}"),
-        ("Parasite species", "@plasmodium_species"),
-        ("Detection confidence", "@plasmodium_status"),
-        ("P1 & P2 consistency", "@P1_P2_consistency"),
-        ("P1 haplotype ID", "@hap_ID_P1"),
-        ("Total P1 read count", "@total_reads_P1"),
-        ("P2 haplotype ID", "@hap_ID_P2"),
-        ("Total P2 read count", "@total_reads_P2"),
-    ]))
-
-    #set up the rest of the figure and save the plot
-    p.outline_line_color = 'black'
-    p.grid.grid_line_color = None
-    p.axis.axis_line_color = 'black'
-    p.axis.major_tick_line_color = None
-    p.axis.major_label_standoff = 0
-    p.legend.orientation = "vertical"
-    p.legend.click_policy="hide"
-    p.add_layout(p.legend[0], 'right') 
-    save(p)
-
-
-
-    
-
-
 
 def plot_bar(df, fname):
     """
@@ -535,7 +350,7 @@ def haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_df, workdi
 
     return hap_div_df
 
-def generate_haplotype_tree(target: str, hap_div_df: pd.DataFrame, workdir: str):
+def generate_haplotype_tree(target: str, hap_div_df: pd.DataFrame, workdir: str, interactive_plotting=False):
 
     """
     Generates an alignment, tree files, and a bokeh alignment plot for the haplotypes of a given target.
@@ -574,12 +389,17 @@ def generate_haplotype_tree(target: str, hap_div_df: pd.DataFrame, workdir: str)
     plt.close(fig)
 
     #View and save the Alignment using bokeh
-    aln_fn = mafft_out_file
-    aln = AlignIO.read(aln_fn, 'fasta')
-    output_file(filename=f'{workdir}/haps_{target}_mafft.html', title="Static HTML file")
-    p = view_alignment(aln, plot_width=1200)
+    if interactive_plotting:
 
-    save(p)
+        from .iplot import view_alignment
+
+        aln_fn = mafft_out_file
+        aln = AlignIO.read(aln_fn, 'fasta')
+        aln_view_fn = f'{workdir}/haps_{target}_mafft.html'
+        
+        view_alignment(aln, aln_view_fn, fontsize="9pt", plot_width=1200)
+
+        
 
 def create_per_read_summary(blast_df: pd.DataFrame, target: str, outdir: str) -> pd.DataFrame:
 
@@ -721,7 +541,7 @@ def process_results(filter_p1, filter_p2, workdir, outdir):
     return df_all
 
 
-def generate_plots(meta_df_all, haps_merged_df, workdir, reference):
+def generate_plots(meta_df_all, haps_merged_df, workdir, reference, interactive_plotting=False):
     """
     Generate plate and bar plots for the given meta_results dataframe and run name.
 
@@ -748,12 +568,16 @@ def generate_plots(meta_df_all, haps_merged_df, workdir, reference):
     # print(cmap)
 
     # Make categorical plots for each lims plate
+
+
     for lims_plate in limsplate:
         for i in haps_merged_df['target'].unique():
-            plot_plate_view(meta_df_all[meta_df_all.lims_plate_id == lims_plate].copy(), 
-                            f'{workdir}/plateview_for_{lims_plate}_{i}.html',
-                            i, reference,
-                            f'{lims_plate} Plasmodium positive samples')
+            if interactive_plotting:
+                from .iplot import plot_plate_view
+                plot_plate_view(meta_df_all[meta_df_all.lims_plate_id == lims_plate].copy(), 
+                                f'{workdir}/plateview_for_{lims_plate}_{i}.html',
+                                i, reference,
+                                f'{lims_plate} Plasmodium positive samples')
 
         # #Make numerical plots for each lims plate
         # for i in haps_merged_df['target'].unique():
@@ -796,7 +620,7 @@ def plasm(args):
             haplotype_df, new_cols = haplotype_summary(hap_df, target, args.workdir)
             blast_df = run_blast(haps_merged_df, target, args.workdir, args.blastdb, args.filter_F1, args.filter_F2)
             hap_div_df = haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_df, args.workdir)
-            generate_haplotype_tree(target, hap_div_df, args.workdir)
+            generate_haplotype_tree(target, hap_div_df, args.workdir, args.interactive_plotting)
             df_list.append(create_per_read_summary(blast_df, target, args.workdir))
             hap_output.append(blast_df)
 
@@ -809,7 +633,7 @@ def plasm(args):
 
         logging.info('merging the samples(meta) dataframe with the stats dataframe and creating plots')
         meta_df_all = pd.merge(samples_df.set_index('sample_id'), df_all, left_index =True, right_index=True, how='left')
-        generate_plots(meta_df_all, haps_merged_df, args.workdir, args.reference)
+        generate_plots(meta_df_all, haps_merged_df, args.workdir, args.reference, args.interactive_plotting)
 
         logging.info('## completed the plasm program!!!')
 
@@ -820,20 +644,24 @@ def main():
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
     parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-b', '--blastdb', help='Blast db prefix. Default: ref_v1.0/plasmomito_P1P2_DB_v1.0', 
+        default='ref_v1.0/plasmomito_P1P2_DB_v1.0', required=True)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='plasm')
     parser.add_argument('-w', '--workdir', help='Working directory. Default: work', default='work')
-    parser.add_argument('-b', '--blastdb', help='Blast db prefix. Default: ref_v1.0/plasmomito_P1P2_DB_v1.0', default='ref_v1.0/plasmomito_P1P2_DB_v1.0')
     parser.add_argument('-d', '--reference', help='Blast db prefix. Default: ref_v1.0', default='ref_v1.0')
     parser.add_argument('-c', '--readcutoff', help='Read cutoffs. Default: 10', default=10)
     parser.add_argument('-q', '--filter_p1', help='Plasmodium genus haplotype filter for P1. Default: 10', default=10)
     parser.add_argument('-r', '--filter_p2', help='Plasmodium genus haplotype filter for P2. Default: 10', default=10)
     parser.add_argument('-p', '--filter_F1', help='Plasmodium Falciparum main haplotype filter for P1. Default: 10', default=10)
     parser.add_argument('-f', '--filter_F2', help='Plasmodium Falciparum main haplotype filter for P2. Default: 10', default=10)
+    parser.add_argument('-i', '--interactive_plotting', 
+                            help='do interactive plotting', action='store_true', default=False)
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
     args = parser.parse_args()
     args.outdir=args.outdir.rstrip('/')
+
     plasm(args)
 
 if __name__ == '__main__':
