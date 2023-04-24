@@ -30,7 +30,7 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     #recompute reads coverage after filtering
     mosq_hap_df = recompute_haplotype_coverage(mosq_hap_df)
 
-    return(mosq_hap_df)
+    return mosq_hap_df
 
 def prep_reference_index(reference_dn, path_to_refversion):
     '''
@@ -116,7 +116,7 @@ def construct_kmer_dict(k):
     for i in itertools.product('ACGT', repeat=k):
         labels.append(''.join(i))
     kmerdict = dict(zip(labels, np.arange(4**k)))
-    return(kmerdict)    
+    return kmerdict   
 
 def construct_unique_kmer_table(mosq_hap_df, k):
     '''
@@ -146,7 +146,7 @@ def construct_unique_kmer_table(mosq_hap_df, k):
         consensus = seq.consensus
         for i in np.arange(len(consensus)-(k-1)):
             table[tgt,id,kmerdict[consensus[i:i+k]]] += 1
-    return(table)
+    return table
 
 def parse_seqid(seqid_s):
     '''
@@ -162,7 +162,7 @@ def parse_seqid(seqid_s):
         parsed_seqid = parsed_seqid.astype(int)
     except:
         raise Exception('Dataframe contains seqids which cannot be converted to integers')
-    return(parsed_seqid)
+    return parsed_seqid
 
 def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     '''
@@ -192,7 +192,7 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     
     logging.info(f'identified {len(error_seqs)} error sequences')
 
-    return(error_seqs)
+    return error_seqs
 
 def recompute_haplotype_coverage(hap_df):
     hap_df = hap_df.drop(["total_reads", "reads_fraction", "nalleles"], axis=1)
@@ -204,7 +204,7 @@ def recompute_haplotype_coverage(hap_df):
 
     hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
             ['consensus'].transform('nunique')
-    return(hap_df)
+    return hap_df
 
 def compute_kmer_distance(kmers, ref_kmers, tgt, qidx, refidx):
     '''
@@ -220,7 +220,7 @@ def compute_kmer_distance(kmers, ref_kmers, tgt, qidx, refidx):
     #normalise
     norm_dist = dist / total
 
-    return(dist, norm_dist)
+    return dist, norm_dist
 
 def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
     '''
@@ -245,7 +245,7 @@ def find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers):
         #include in dict
         nndict[seqid] = (nn_qidx, norm_dist.min())
 
-    return(nndict)
+    return nndict
 
 def perform_nn_assignment_samples(non_error_hap_df, ref_hap_df, nndict, af_c, af_i, af_f,\
                                   normalisation):
@@ -307,7 +307,7 @@ def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, weigh
     summed_af_nn = np.sum(af_nn, axis=0)
     #normalise proportion and weigth in number of alleles
     assignment_proportion = weight*summed_af_nn/np.sum(summed_af_nn)
-    return(assignment_proportion)
+    return assignment_proportion
 
 def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
     '''
@@ -331,7 +331,7 @@ def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
 
     comb_stats_df.reset_index(inplace=True)
 
-    return(comb_stats_df)
+    return comb_stats_df
 
 def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets, \
                            rc_med_threshold, ma_med_threshold, ma_hi_threshold):
@@ -357,7 +357,7 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets, 
     logging.info(f"Identified {(comb_stats_df.contamination_risk=='high').sum()} samples with high contamination risk \
         \n and {(comb_stats_df.contamination_risk=='medium').sum()} samples with medium contamination risk")
 
-    return(comb_stats_df)
+    return comb_stats_df
 
 def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_coarse, \
                         result_int, result_fine, true_multi_targets, nn_asgn_threshold, \
@@ -381,7 +381,7 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, result_co
     comb_stats_df = estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets, \
                                            rc_med_threshold, ma_med_threshold, ma_hi_threshold)
 
-    return(comb_stats_df)
+    return comb_stats_df
 
 def plot_assignment_proportions(result, level, colors, nn_asgn_threshold):
     
@@ -397,7 +397,7 @@ def plot_assignment_proportions(result, level, colors, nn_asgn_threshold):
     ax.set_position([box.x0, box.y0+3/7*box.height, box.width, box.height*4/7])
     leg1 = ax.legend(loc='upper center', ncol=7, bbox_to_anchor=(0.5, -.05), fontsize=8.7)
     ax.margins(y=0)
-    return(fig, ax)
+    return fig, ax
 
 
 def nn(args):
