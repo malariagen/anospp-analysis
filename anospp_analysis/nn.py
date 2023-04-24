@@ -89,6 +89,22 @@ def construct_kmer_dict(k):
     kmerdict = dict(zip(labels, np.arange(4**k)))
     return kmerdict   
 
+def parse_seqid(seqid_s):
+    '''
+    Parse seqids passed as a string or a pandas Series
+    '''
+    if isinstance(seqid_s, str):
+        parsed_seqid = pd.DataFrame([seqid_s.split('-')])
+    else:
+        parsed_seqid = seqid_s.str.split('-', expand=True)
+    
+    assert parsed_seqid[0].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
+    try:
+        parsed_seqid = parsed_seqid.astype(int)
+    except:
+        raise Exception('Dataframe contains seqids which cannot be converted to integers')
+    return parsed_seqid
+
 def construct_unique_kmer_table(mosq_hap_df, k):
     '''
     constructs a k-mer table of dimensions n_amp * maxallele * 4**k
@@ -105,35 +121,19 @@ def construct_unique_kmer_table(mosq_hap_df, k):
     #subset to unique haplotypes
     uniqueseq = mosq_hap_df[['seqid', 'consensus']].drop_duplicates()
     #determine shape of table by highest seqid
-    parsed_seqid = parse_seqid(uniqueseq.seqid)
-    maxid = parsed_seqid[1].max()+1
+    parsed_seqids = parse_seqid(uniqueseq.seqid)
+    maxid = parsed_seqids[1].max()+1
 
     #initiate table to store kmer counts
     table = np.zeros((len(MOSQ_TARGETS), maxid, 4**k), dtype='int')
     #translate each unique haplotype to kmer counts
     for idx, seq in uniqueseq.iterrows():
-        tgt = parsed_seqid.loc[idx,0]
-        id = parsed_seqid.loc[idx,1]
+        tgt = parsed_seqids.loc[idx,0]
+        id = parsed_seqids.loc[idx,1]
         consensus = seq.consensus
         for i in np.arange(len(consensus)-(k-1)):
             table[tgt,id,kmerdict[consensus[i:i+k]]] += 1
     return table
-
-def parse_seqid(seqid_s):
-    '''
-    Parse seqids passed as a string or a pandas Series
-    '''
-    if isinstance(seqid_s, str):
-        parsed_seqid = pd.DataFrame([seqid_s.split('-')])
-    else:
-        parsed_seqid = seqid_s.str.split('-', expand=True)
-    
-    assert parsed_seqid[0].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
-    try:
-        parsed_seqid = parsed_seqid.astype(int)
-    except:
-        raise Exception('Dataframe contains seqids which cannot be converted to integers')
-    return parsed_seqid
 
 def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     '''
