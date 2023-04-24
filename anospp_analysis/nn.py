@@ -45,7 +45,7 @@ def prep_reference_index(reference_version, path_to_refversion):
 
     assert os.path.isfile(f'{reference_path}/haplotypes.tsv'), f'reference version {reference_version} at {reference_path} \
         does not contain required haplotypes.tsv file'
-    ref_hap_df = pd.read_csv(f'{reference_path}haplotypes.tsv', sep='\t')
+    ref_hap_df = pd.read_csv(f'{reference_path}/haplotypes.tsv', sep='\t')
 
     assert os.path.isfile(f'{reference_path}/allele_freq_coarse.npy'), f'reference version {reference_version} at {reference_path} \
         does not contain required allele_freq_coarse.npy file'
@@ -458,7 +458,7 @@ def nn(args):
     logging.info('All done!')
 
     
-def main():
+def mai
     
     parser = argparse.ArgumentParser("NN assignment for ANOSPP sequencing data")
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
