@@ -32,46 +32,46 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
 
     return mosq_hap_df
 
-def prep_reference_index(reference_dn, path_to_refversion):
+def prep_reference_index(reference_version, path_to_refversion):
     '''
     Read in standardised reference index files from database (currently directory)
     '''
 
-    logging.info(f'importing reference index {reference_dn}')
+    logging.info(f'importing reference index {reference_version}')
 
-    reference_path = f'{path_to_refversion}/{reference_dn}/'
+    reference_path = f'{path_to_refversion}/{reference_version}/'
 
-    assert os.path.isdir(reference_path), f'reference version {reference_dn} does not exist at {reference_path}'
+    assert os.path.isdir(reference_path), f'reference version {reference_version} does not exist at {reference_path}'
 
-    assert os.path.isfile(f'{reference_path}/haplotypes.tsv'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/haplotypes.tsv'), f'reference version {reference_version} at {reference_path} \
         does not contain required haplotypes.tsv file'
     ref_hap_df = pd.read_csv(f'{reference_path}haplotypes.tsv', sep='\t')
 
-    assert os.path.isfile(f'{reference_path}/allele_freq_coarse.npy'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/allele_freq_coarse.npy'), f'reference version {reference_version} at {reference_path} \
         does not contain required allele_freq_coarse.npy file'
     af_c = np.load(f'{reference_path}/allele_freq_coarse.npy')
-    assert os.path.isfile(f'{reference_path}/allele_freq_int.npy'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/allele_freq_int.npy'), f'reference version {reference_version} at {reference_path} \
         does not contain required allele_freq_int.npy file'
     af_i = np.load(f'{reference_path}/allele_freq_int.npy')
-    assert os.path.isfile(f'{reference_path}/allele_freq_fine.npy'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/allele_freq_fine.npy'), f'reference version {reference_version} at {reference_path} \
         does not contain required allele_freq_fine.npy file'
     af_f = np.load(f'{reference_path}/allele_freq_fine.npy')
 
-    assert os.path.isfile(f'{reference_path}/sgp_coarse.txt'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/sgp_coarse.txt'), f'reference version {reference_version} at {reference_path} \
         does not contain required sgp_coarse.txt file'
     sgp_c = []
     with open(f'{reference_path}/sgp_coarse.txt', 'r') as fn:
         for line in fn:
             sgp_c.append(line.strip())
 
-    assert os.path.isfile(f'{reference_path}/sgp_int.txt'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/sgp_int.txt'), f'reference version {reference_version} at {reference_path} \
         does not contain required sgp_int.txt file'
     sgp_i = []
     with open(f'{reference_path}/sgp_int.txt', 'r') as fn:
         for line in fn:
             sgp_i.append(line.strip())
 
-    assert os.path.isfile(f'{reference_path}/sgp_fine.txt'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/sgp_fine.txt'), f'reference version {reference_version} at {reference_path} \
         does not contain required sgp_fine.txt file'
     sgp_f = []
     with open(f'{reference_path}/sgp_fine.txt', 'r') as fn:
@@ -83,7 +83,7 @@ def prep_reference_index(reference_dn, path_to_refversion):
     ref_hap_df['intermediate_sgp'] = pd.Categorical(ref_hap_df['intermediate_sgp'], sgp_i, ordered=True)
     ref_hap_df['fine_sgp'] = pd.Categorical(ref_hap_df['fine_sgp'], sgp_f, ordered=True)
 
-    assert os.path.isfile(f'{reference_path}/multiallelism.tsv'), f'reference version {reference_dn} at {reference_path} \
+    assert os.path.isfile(f'{reference_path}/multiallelism.tsv'), f'reference version {reference_version} at {reference_path} \
         does not contain required multiallelism.tsv file'
     true_multi_targets = pd.read_csv(f'{reference_path}/multiallelism.tsv', sep='\t')
 
@@ -418,7 +418,7 @@ def nn(args):
 
     ref_hap_df, af_c, af_i, af_f, true_multi_targets, \
         colors_coarse, colors_int, colors_fine = prep_reference_index(\
-        args.reference, path_to_refversion=args.path_to_refversion)
+        args.reference_version, path_to_refversion=args.path_to_refversion)
 
     kmers = construct_unique_kmer_table(mosq_hap_df, int(args.kmer_length))
     ref_kmers = construct_unique_kmer_table(ref_hap_df, int(args.kmer_length))
@@ -464,7 +464,7 @@ def main():
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
     parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
-    parser.add_argument('-r', '--reference', help='Reference index version - currently a directory name.\
+    parser.add_argument('-r', '--reference_version', help='Reference index version - currently a directory name.\
          Default: nnv1', default='nnv1')
     parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
          Default: test_data', default='test_data')
