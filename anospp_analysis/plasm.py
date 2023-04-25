@@ -1,62 +1,69 @@
-import glob
 import argparse
 import os
 import subprocess
 from subprocess import run
-from collections import OrderedDict
 import sys
 import seaborn as sns
 import matplotlib
 matplotlib.use('Agg')
+from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 from Bio import AlignIO
 from Bio import Phylo
 
 from .util import *
 
-def plot_lims_plate(df, target, plate, fname, reference, title=None, annot=True, cmap='coolwarm', center=None):
+def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title=None, center=None):
     """
     Plot a heatmap of the total read count for a given target on a plate.
 
     Args:
         df (pandas.DataFrame): A dataframe containing the read counts and positions on the plate.
         target (str): The name of the target (e.g. 'P1', 'P2').
-        title (str): The title of the plot. Default is None.
         plate (str): The name of the plate. Default is None.
+        fname: The name of the file to save the plot to. Default is None.
         annot (bool): Whether to annotate the heatmap cells with their values. Default is True.
         cmap (str or colormap): The colormap to use. Default is 'coolwarm'.
         center (float): The value at which to center the colormap. Default is None.
-        filename (str): The name of the file to save the plot to. Default is None.
+        title (str): The title of the plot. Default is None.
 
     Returns:
         None
     """
-    #load colors
-    if not os.path.isfile(f'{reference}/species_colours.csv'):
-        logging.warning('No colors defined for plotting.')
-        colors_dict = {}
-    else:
-        colors = pd.read_csv(f'{reference}/species_colours.csv')
-        colors_dict = dict(zip(colors['species'], colors['color']))
 
-
-    
-
-    fig, ax = plt.subplots(1, 1, figsize=(14, 8))
+    # Extract the column name that corresponds to the given target.
     col = f'total_reads_{target}'
-    sns.heatmap(df.pivot(index = 'lims_row', columns='lims_col', values= col), annot=annot, cmap=colors_dict, ax=ax, center=center)
+    
+    # Create a pivot table that maps the read counts to their respective positions on the plate.
+    pivot_df = df.pivot(index='lims_row', columns='lims_col', values=col)
+    
+    # Set up the plot.
+    fig, ax = plt.subplots(1, 1, figsize=(14, 8))
+    
+    # Plot the heatmap using Seaborn.
+    sns.heatmap(pivot_df, annot=annot, cmap=cmap, ax=ax, center=center, fmt='.5g')
+    
+    # Set the title of the plot.
     ax.set_title(f"Total {target} reads for {plate}")
+    
+    # Add grid lines to the plot.
     ax.hlines([i * 2 for i in range(9)], 0, 24, colors='k')
     ax.vlines([j * 2 for j in range(13)], 0, 16, colors='k')
+    
+    # Adjust the layout of the plot to avoid overlapping.
     plt.tight_layout()
+    
+    # Save the plot to file if a filename is provided.
     if fname is not None:
         plt.savefig(fname, dpi=300, bbox_inches='tight')
+    
+    # Close the plot to free up memory.
     plt.close(fig)
 
-def plot_bar(df, fname):
+
+def plot_bar(df, reference, fname):
     """
-    Plots bar charts of plasmodium species counts, grouped by plate ID and plasmodium status.
+    Plots stacked bar charts of plasmodium species counts, grouped by plasmodium status for each plate.
 
     Args:
     - df: pandas DataFrame containing the plasmodium species and status counts for each plate
@@ -69,14 +76,27 @@ def plot_bar(df, fname):
     data = df.dropna(subset=['plasmodium_species', 'plasmodium_status'])
 
     # Group data by plasmodium species, status, and plate ID and count the occurrences
-    plasmodium_count = pd.DataFrame({'count': data.groupby(["plasmodium_species", "plasmodium_status", "lims_plate_id"]).size()}).reset_index()
+    plasmodium_count = pd.DataFrame({'count': data.groupby(["plasmodium_species", "plasmodium_status"]).size()}).reset_index()
 
-    # Set up the plots
+    # Load colors
+    if not os.path.isfile(f'{reference}/species_colours.csv'):
+        logging.warning('No colors defined for plotting.')
+        cmap = {}
+
+    else:
+        colors = pd.read_csv(f'{reference}/species_colours.csv')
+        cmap = dict(zip(colors['species'], colors['color']))
+
+    
+    # Set up the plot
     plt.figure(figsize=(8, 8))
     sns.set_context(rc={'patch.linewidth': 0.5})
-    ax = sns.catplot(x="plasmodium_species", y="count", row="lims_plate_id",
-                     col="plasmodium_status", data=plasmodium_count, kind="bar",
-                     estimator=sum, facet_kws={'legend_out': True})
+    
+    # Create a stacked bar plot
+    ax = sns.catplot(x="plasmodium_species", y="count",
+                     col="plasmodium_status", data=plasmodium_count,
+                     kind="bar", facet_kws={'legend_out': True},
+                     palette=cmap)
 
     # Customize plot labels
     ax.set_xticklabels(rotation=40, ha="right", fontsize=9)
@@ -84,10 +104,8 @@ def plot_bar(df, fname):
     ax.set_ylabels('Species counts', fontsize=12)
     plt.tight_layout()
 
-    #save the plot to file
-    ax.savefig(fname, dpi=300, bbox_inches='tight')
-
-
+    # Save the plot to file
+    plt.savefig(fname, dpi=300, bbox_inches='tight')
 
 def process_haplotypes(hap_df, comb_stats_df, filter_p1, filter_p2):
 
@@ -579,15 +597,14 @@ def generate_plots(meta_df_all, haps_merged_df, workdir, reference, interactive_
                                 i, reference,
                                 f'{lims_plate} Plasmodium positive samples')
 
-        # #Make numerical plots for each lims plate
-        # for i in haps_merged_df['target'].unique():
-        #     plot_lims_plate(meta_df_all[meta_df_all.lims_plate_id == lims_plate].copy(),
-        #                     i, lims_plate,
-        #                     f'{workdir}/plateview_heatmap_{lims_plate}_{i}.png',
-        #                     f'{reference}/species_colours.csv', annot=False)
+        #Make numerical plots for each lims plate
+        for i in haps_merged_df['target'].unique():
+            plot_lims_plate(meta_df_all[meta_df_all.lims_plate_id == lims_plate].copy(),
+                            i, lims_plate,
+                            f'{workdir}/plateview_heatmap_{lims_plate}_{i}.png', annot=True)
 
-    # # Make the bar plots
-    # plot_bar(meta_df_all, f'{workdir}/bar_plots.png')
+    # Make the bar plots
+    plot_bar(meta_df_all, reference, f'{workdir}/bar_plots.png')
 
 
 

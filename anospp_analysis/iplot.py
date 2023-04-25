@@ -1,30 +1,17 @@
 ###imports for bokeh
 from bokeh.plotting import output_file, save
-# import panel as pn
-import bokeh.plotting as bk
-from bokeh.plotting import figure, output_file, show
+from bokeh.plotting import figure, output_file
 from bokeh.models import ColumnDataSource, Span, Range1d
 from bokeh.transform import factor_cmap
-from bokeh.layouts import gridplot, row, column
+from bokeh.layouts import gridplot
 from bokeh.models.glyphs import Text, Rect
 from bokeh.models.tools import HoverTool
 from bokeh.transform import dodge
-from bokeh.embed import components
 
-import glob
-import argparse
 import os
-import subprocess
-from subprocess import run
-from collections import OrderedDict
-import sys
-import seaborn as sns
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-from Bio import AlignIO
-from Bio import Phylo
 
 from .util import *
 
@@ -159,8 +146,8 @@ def plot_plate_view(df, fname, target, reference, title=None):
         colors = pd.read_csv(f'{reference}/species_colours.csv')
         cmap = dict(zip(colors['species'], colors['color']))
         # print(cmap)
-    p.rect("row", "col", 0.95, 0.95, source=source, fill_alpha=.9, legend_field="plasmodium_species")#,
-           #color=factor_cmap('plasmodium_species', palette=list(cmap.values()), factors=list(cmap.keys())))
+    p.rect("row", "col", 0.95, 0.95, source=source, fill_alpha=.9, legend_field="plasmodium_species",
+           color=factor_cmap('plasmodium_species', palette=list(cmap.values()), factors=list(cmap.keys())))
 
     #add the species count text for each field
     text_props = {"source": source, "text_align": "left", "text_baseline": "middle"}
