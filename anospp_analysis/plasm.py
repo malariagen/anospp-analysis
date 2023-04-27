@@ -12,6 +12,8 @@ from Bio import AlignIO
 from Bio import Phylo
 
 from .util import *
+from .iplot import plot_plate_view
+
 
 def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title=None, center=None):
     """
@@ -30,6 +32,8 @@ def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title
     Returns:
         None
     """
+
+    logging.info(f"Plotting a heatmap for each lims plate for {target}.")
 
     # Extract the column name that corresponds to the given target.
     col = f'total_reads_{target}'
@@ -60,7 +64,6 @@ def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title
     # Close the plot to free up memory.
     plt.close(fig)
 
-
 def plot_bar(df, reference, fname):
     """
     Plots stacked bar charts of plasmodium species counts, grouped by plasmodium status for each plate.
@@ -72,6 +75,9 @@ def plot_bar(df, reference, fname):
     Returns:
     - None
     """
+
+    logging.info(f"Generating bar plots for the three plasmodium statuses")
+
     # Drop rows with missing values in 'plasmodium_species' or 'plasmodium_status'
     data = df.dropna(subset=['plasmodium_species', 'plasmodium_status'])
 
@@ -92,11 +98,12 @@ def plot_bar(df, reference, fname):
     plt.figure(figsize=(8, 8))
     sns.set_context(rc={'patch.linewidth': 0.5})
     
-    # Create a stacked bar plot
+    #Create a bar plot
     ax = sns.catplot(x="plasmodium_species", y="count",
                      col="plasmodium_status", data=plasmodium_count,
                      kind="bar", facet_kws={'legend_out': True},
                      palette=cmap)
+
 
     # Customize plot labels
     ax.set_xticklabels(rotation=40, ha="right", fontsize=9)
@@ -107,7 +114,7 @@ def plot_bar(df, reference, fname):
     # Save the plot to file
     plt.savefig(fname, dpi=300, bbox_inches='tight')
 
-def process_haplotypes(hap_df, comb_stats_df, filter_p1, filter_p2):
+def hard_filter_haplotypes(hap_df, comb_stats_df, filter_p1, filter_p2):
 
     """
     Processes haplotype data and filters it according to read counts.
@@ -131,8 +138,10 @@ def process_haplotypes(hap_df, comb_stats_df, filter_p1, filter_p2):
 
     #Filter out columns that have no recorded samples
     haps_merged_df = filtered_hap_df.loc[:, (filtered_hap_df != 0).any(axis=0)]
+    col_removed = len(filtered_hap_df.columns) - len(haps_merged_df.columns)
+    logging.info(f'{col_removed} columns were removed for having no recorded samples')
 
-    return(haps_merged_df)
+    return haps_merged_df
 
 def create_hap_data(hap_df):
     """
@@ -145,26 +154,36 @@ def create_hap_data(hap_df):
         pandas.DataFrame: A dataframe with haplotype and reads/sample stats.
     """
 
+    logging.info(f"Creating a dataframe with haplotype and reads/sample stats.")
+
     # Create pivot table data for dada2 haplotypes using the hap_df data
-    hap_data_filt = hap_df[['sample_id', 'consensus', 'reads']].copy()
-    haps_df = hap_data_filt.pivot_table(values='reads', index='sample_id', columns='consensus')
-    haps_df.fillna(0, inplace=True)
+    hap_data = hap_df[['sample_id', 'consensus', 'reads']].copy()
+    hap_data_pivot = hap_data.pivot_table(values='reads', index='sample_id', columns='consensus')
+    hap_data_pivot.fillna(0, inplace=True)
 
     # Remove 'consensus' header
-    haps_df.columns.name = None
+    hap_data_pivot.columns.name = None
 
     # Move 'sample_id' index to column
-    haps_df = haps_df.reset_index()
+    hap_data_pivot = hap_data_pivot.reset_index()
 
     # Filter out columns that have no recorded samples
-    haps_df = haps_df.loc[:, (haps_df != 0).any(axis=0)]
+    hap_data_pivot_filt = hap_data_pivot.loc[:, (hap_data_pivot != 0).any(axis=0)]
+    # assert haps_df.loc[:,(haps_df == 0).all(axis=0)], f"columns with no columns are not expected here. Check your input data" ### get Alex's assistance
+
+    haps_check = len(hap_data_pivot.columns) - len(hap_data_pivot_filt.columns)
+    logging.info(f'{haps_check} columns had no recorded haplotype counts')
+
+    haps_check = hap_data_pivot.loc[:, (hap_data_pivot == 0).any(axis=0)]
+    # print(haps_check)
 
     # Set 'sample_id' as index and convert the values to integer
-    haps_df = haps_df.set_index('sample_id').astype(int)
+    hap_data_pivot_filt = hap_data_pivot_filt.set_index('sample_id').astype(int)
 
-    return haps_df
+    return hap_data_pivot_filt
 
-def haplotype_summary(hap_df: pd.DataFrame, target: str, workdir: str) -> pd.DataFrame:
+
+def haplotype_summary(hap_df, target, workdir):
     """
     Generate a summary of haplotype data for a specific target.
 
@@ -189,7 +208,9 @@ def haplotype_summary(hap_df: pd.DataFrame, target: str, workdir: str) -> pd.Dat
 
     # Filter the input data to the current target and prepare the DataFrame.
     hap_df_filt = hap_df[hap_df["target"] == target]
+    # print(hap_df_filt)
     haps_df = create_hap_data(hap_df_filt)
+    # print(haps_df)
     hap_df_filt = hap_df_filt.set_index("sample_id")
     haps_df_merged = pd.merge(
         left=hap_df_filt,
@@ -198,6 +219,8 @@ def haplotype_summary(hap_df: pd.DataFrame, target: str, workdir: str) -> pd.Dat
         right_index=True,
         how="inner",
     )
+    assert hap_df_filt.shape[0] == haps_df_merged.shape[0], 'Check your data as some data may have been lost or dropped'
+    
 
     # Filter out columns that have no recorded samples.
     haps_df_merged = haps_df_merged.loc[:, (haps_df_merged != 0).any(axis=0)]
@@ -368,7 +391,7 @@ def haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_df, workdi
 
     return hap_div_df
 
-def generate_haplotype_tree(target: str, hap_div_df: pd.DataFrame, workdir: str, interactive_plotting=False):
+def generate_haplotype_tree(target, hap_div_df, workdir, interactive_plotting=False):
 
     """
     Generates an alignment, tree files, and a bokeh alignment plot for the haplotypes of a given target.
@@ -378,6 +401,7 @@ def generate_haplotype_tree(target: str, hap_div_df: pd.DataFrame, workdir: str,
         hap_div_df: The DataFrame containing the haplotype data.
         workdir: The path to the directory where the files will be saved.
     """
+
     logging.info(f'Generating the alignment, tree files, and bokeh alignment plots for {target}')
 
     # Create a fasta file from the haplotypes and perform a multiple sequence alignment
@@ -415,11 +439,9 @@ def generate_haplotype_tree(target: str, hap_div_df: pd.DataFrame, workdir: str,
         aln = AlignIO.read(aln_fn, 'fasta')
         aln_view_fn = f'{workdir}/haps_{target}_mafft.html'
         
-        view_alignment(aln, aln_view_fn, fontsize="9pt", plot_width=1200)
+        view_alignment(aln, aln_view_fn, fontsize="9pt", plot_width=1200)      
 
-        
-
-def create_per_read_summary(blast_df: pd.DataFrame, target: str, outdir: str) -> pd.DataFrame:
+def create_per_read_summary(blast_df, target, outdir):
 
     """
     Generates a per-read summary for the given target.
@@ -432,6 +454,8 @@ def create_per_read_summary(blast_df: pd.DataFrame, target: str, outdir: str) ->
     Returns:
         pd.DataFrame: The summary dataframe.
     """
+
+    logging.info(f'Generating a per-read summary for {target}')
 
     # Create a dataframe with the relevant stats
     df_sum = blast_df.groupby(['sample_id', 'total_reads']).agg(
@@ -449,7 +473,8 @@ def create_per_read_summary(blast_df: pd.DataFrame, target: str, outdir: str) ->
 
     return df_sum
 
-def merge_and_export(samples_df: pd.DataFrame, merged_df: pd.DataFrame, workdir: str) -> pd.DataFrame:
+
+def merge_and_export(samples_df, merged_df, workdir):
 
     """
     Merge summary outputs with metadata and export the resulting dataframe to a specified directory.
@@ -462,6 +487,9 @@ def merge_and_export(samples_df: pd.DataFrame, merged_df: pd.DataFrame, workdir:
     Returns:
         A DataFrame containing the merged and exported results with additional columns for sample run and sample ID.
     """
+
+    logging.info(f'Merging the summary outputs with the sample metadata and exporting the merged dataframe to the work directory')
+
     # Merge the two dataframes and select only relevant columns
     df_merged = pd.merge(samples_df.set_index('sample_id'), merged_df, left_index=True, right_index=True, how='right')
     df_final = df_merged[['sample_supplier_name', 'plate_id', 'total_reads_P1',
@@ -492,6 +520,8 @@ def process_results(filter_p1, filter_p2, workdir, outdir):
     Returns:
         pd.DataFrame: A pandas DataFrame containing various metrics for the samples.
     """
+
+    logging.info(f'Reading and processng the combined results summary TSV file and computing several stats')
 
     def uniques(xs):
         return list(sorted(set(xi for x in xs for xi in x)))
@@ -558,18 +588,24 @@ def process_results(filter_p1, filter_p2, workdir, outdir):
 
     return df_all
 
-
 def generate_plots(meta_df_all, haps_merged_df, workdir, reference, interactive_plotting=False):
     """
-    Generate plate and bar plots for the given meta_results dataframe and run name.
+    Generates plate and bar plots for the given metadata and haplotypes dataframes, and saves them in the specified
+    directory.
 
     Parameters:
-    meta_results (pandas.DataFrame): dataframe containing the metadata results
-    run (str): name of the current run
+    meta_df_all (pandas.DataFrame): A dataframe containing the metadata results.
+    haps_merged_df (pandas.DataFrame): A dataframe containing the haplotypes data.
+    workdir (str): The path of the directory to save the plots in.
+    reference (str): The reference of the run.
+    interactive_plotting (bool): Whether to create interactive plots. Default is False.
 
     Returns:
     None
     """
+
+    logging.info(f'Generating plate and bar plots')
+
     # Create columns for sorting the dataframe
     meta_df_all['lims_row'] = meta_df_all.lims_well_id.str.slice(0,1)
     meta_df_all['lims_col'] = meta_df_all.lims_well_id.str.slice(1).astype(int)
@@ -577,59 +613,62 @@ def generate_plots(meta_df_all, haps_merged_df, workdir, reference, interactive_
     # Get the lims plate IDs
     limsplate = meta_df_all.lims_plate_id.unique()
 
-    # # Set up the color map
-    # cmap = {"": "#FFFFFF"}
-    # color_l = list(mcolors.CSS4_COLORS)
-    # for i, species in enumerate(sorted(meta_df_all['plasmodium_species'].astype(str).unique())):
-    #     cmap[species] = mcolors.CSS4_COLORS[color_l[-i]]
-
-    # print(cmap)
-
     # Make categorical plots for each lims plate
-
-
     for lims_plate in limsplate:
-        for i in haps_merged_df['target'].unique():
+        for target in haps_merged_df['target'].unique():
             if interactive_plotting:
-                from .iplot import plot_plate_view
                 plot_plate_view(meta_df_all[meta_df_all.lims_plate_id == lims_plate].copy(), 
-                                f'{workdir}/plateview_for_{lims_plate}_{i}.html',
-                                i, reference,
+                                f'{workdir}/plateview_for_{lims_plate}_{target}.html',
+                                target, reference,
                                 f'{lims_plate} Plasmodium positive samples')
 
         #Make numerical plots for each lims plate
-        for i in haps_merged_df['target'].unique():
+        for target in haps_merged_df['target'].unique():
             plot_lims_plate(meta_df_all[meta_df_all.lims_plate_id == lims_plate].copy(),
-                            i, lims_plate,
-                            f'{workdir}/plateview_heatmap_{lims_plate}_{i}.png', annot=True)
+                            target, lims_plate,
+                            f'{workdir}/plateview_heatmap_{lims_plate}_{target}.png', annot=True)
 
     # Make the bar plots
     plot_bar(meta_df_all, reference, f'{workdir}/bar_plots.png')
 
 
-
 def plasm(args):
 
+    """
+    Run the plasm program to analyze ANOSPP QC data, including preparing input data and variables, running BLAST, 
+    creating a dataframe, and generating plots.
+    
+    Parameters:
+    args (argparse.Namespace): Namespace object containing command line arguments
+    
+    Returns:
+    None
+    """
+
+    # Set up logging and create output directories
     setup_logging(verbose=args.verbose)
     os.makedirs(args.outdir, exist_ok=True)
     os.makedirs(args.workdir, exist_ok=True)
 
+    # Prepare haplotype and sample dataframes
     logging.info('ANOSPP QC data import started')
     hap_df = prep_hap(args.haplotypes)
-    # plasm_hap_df = hap_df.loc[hap_df.target.isin(PLASM_TARGETS)]  
-    logging.info('## prepare input data and variables')
     samples_df = prep_samples(args.manifest)
+
+    # Combine haplotype and sample dataframes with stats
+    logging.info('## prepare input data and variables')
     stats_df = prep_stats(args.stats)
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-    # run_id = '_'.join(str(value) for value in comb_stats_df.run_id.unique())
-    haps_merged_df = process_haplotypes(hap_df, comb_stats_df, args.filter_p1, args.filter_p2)
+    haps_merged_df = hard_filter_haplotypes(hap_df, comb_stats_df, args.filter_p1, args.filter_p2)
 
+    # Check for presence of PLASM_TARGETS
     logging.info('Checking for the presence of PLASM_TARGETS')
     if len(haps_merged_df['target'].unique()) < 1:
         logging.warning('Could not find both PLASM_TARGETS in hap_df')
         sys.exit(1)
 
     else:
+        # Run BLAST and create haplotype tree for each target
         logging.info('## run blast')
         df_list = []
         hap_output = []
@@ -641,6 +680,7 @@ def plasm(args):
             df_list.append(create_per_read_summary(blast_df, target, args.workdir))
             hap_output.append(blast_df)
 
+        # Combine blast results and create merged dataframe for all targets
         logging.info('## create a dataframe used the merged summary outputs')
         merged_df = pd.concat(df_list, axis=1)
         merge_and_export(samples_df, merged_df, args.workdir)
@@ -648,6 +688,7 @@ def plasm(args):
         merged_hap_df = pd.concat(hap_output, axis=0)[['sample_id', 'hap_id', 'target', 'consensus', 'pident']].copy().set_index('sample_id')
         merged_hap_df.to_csv(f'{args.outdir}/Plasmodium_haplotypes_for.tsv', sep='\t')
 
+        # Merge sample and stats dataframes and generate plots
         logging.info('merging the samples(meta) dataframe with the stats dataframe and creating plots')
         meta_df_all = pd.merge(samples_df.set_index('sample_id'), df_all, left_index =True, right_index=True, how='left')
         generate_plots(meta_df_all, haps_merged_df, args.workdir, args.reference, args.interactive_plotting)
