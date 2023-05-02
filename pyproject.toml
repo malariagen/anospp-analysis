@@ -14,6 +14,7 @@ numpy = "*"
 seaborn = "*"
 BioPython = "*"
 cutadapt = "*"
+keras = "^2.12.0"
 
 [tool.poetry.group.dev.dependencies]
 
@@ -21,6 +22,7 @@ cutadapt = "*"
 anospp-prep = "anospp_analysis.prep:main"
 anospp-qc = "anospp_analysis.qc:main"
 anospp-nn = "anospp_analysis.nn:main"
+anospp-vae = "anospp_analysis.vae:main"
 
 [build-system]
 requires = ["poetry-core"]
