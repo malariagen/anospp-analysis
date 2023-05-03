@@ -49,3 +49,23 @@ def test_prep_kmers():
     assert (result.sum(axis=1) == np.array([18374, 18628, 18357, 18634, 18364, 18326, 18613, \
                                             18627, 18629, 18619, 18655, 18354])).all()
 
+def test_predict_latent_pos():
+    hap_df = pd.read_csv('test_data/output/non_error_haplotypes.tsv', sep='\t')
+    vae_samples = np.array(['DN806197N_A1', 'DN806197N_A2', 'DN806197N_A3', 'DN806197N_A4', \
+                            'DN806197N_A5', 'DN806197N_A6', 'DN806197N_A7', 'DN806197N_A8', \
+                            'DN806197N_A9', 'DN806197N_A10', 'DN806197N_A11', 'DN806197N_A12'])
+    vae_hap_df = hap_df.query('sample_id in @vae_samples')
+    kmer_table = vae.prep_kmers(vae_hap_df, vae_samples, 8)
+    comparison = pd.read_csv("test_data/comparisons/latent_coordinates.tsv", sep='\t', \
+                             index_col=0)
+
+    result = vae.predict_latent_pos(
+        kmer_table, 
+        vae_samples, 
+        8,
+        'ref_databases/gcrefv1/_weights.hdf5'
+    )
+
+    assert (result.mean1 == comparison.mean1).all()
+    assert (result.mean2 == comparison.mean2).all()
+    assert (result.mean3 == comparison.mean3).all()
