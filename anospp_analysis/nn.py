@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 import os
@@ -488,7 +487,7 @@ def main():
          Default: nnv1', default='nnv1')
     parser.add_argument('-o', '--outdir', help='Output directory. Default: nn', default='nn')
     parser.add_argument('--path_to_refversion', help='path to reference index version.\
-         Default: test_data', default='test_data')
+         Default: ref_databases', default='ref_databases')
     parser.add_argument('--no_plotting', help='Do not generate plots. Default: False', \
                         default=False)
     parser.add_argument('--allelism_normalisation', help='Normalisation method over multiple alleles. Options: \
