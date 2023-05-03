@@ -4,12 +4,17 @@ import matplotlib.pyplot as plt
 from collections import OrderedDict
 import os
 import argparse
+import keras
 
-from util import *
-from nn import parse_seqids_series, construct_unique_kmer_table
+from .util import *
+from .nn import parse_seqids_series, construct_unique_kmer_table
 
 #Variables
 K = 8
+LATENTDIM = 3
+SEED = 374173
+WIDTH = 128
+DEPTH = 6
 
 def prep_reference_index(reference_version, path_to_refversion):
     '''
@@ -29,6 +34,11 @@ def prep_reference_index(reference_version, path_to_refversion):
     level, sgp, n_targets_str = open(f'{reference_path}/selection_criteria.txt').read().split('\t')
     n_targets = int(n_targets_str)
 
+    assert os.path.isfile(f'{reference_path}/_weights.hdf5'), f'reference version \
+        {reference_version} at {reference_path} does not contain required \
+        _weights.hdf5 file'
+    vae_weights_file = f'{reference_path}/_weights.hdf5'
+
     if os.path.isfile(f'{reference_path}/version.txt'):
         with open(f'{reference_path}/version.txt', 'r') as fn:
             for line in fn:
@@ -38,7 +48,7 @@ def prep_reference_index(reference_version, path_to_refversion):
                         at {reference_path}')
         version_name = 'unknown'
         
-    return level, sgp, n_targets, version_name
+    return level, sgp, n_targets, vae_weights_file, version_name
 
 def select_samples(comb_stats_df, hap_df, level, sgp, n_targets):
     '''
@@ -98,10 +108,75 @@ def prep_kmers(vae_hap_df, vae_samples, k):
 
     return(kmers_samples)
 
+def latent_space_sampling(args):
+    
+    #Add noise to encoder output
+    z_mean, z_log_var = args
+    epsilon = keras.backend.random_normal(shape=(keras.backend.shape(z_mean)[0], LATENTDIM),
+                                          mean=0, stddev=1., seed=SEED)
+    
+    return z_mean + keras.backend.exp(z_log_var) * epsilon
 
-    
-    
-    
+def define_vae_input(k):
+    input_seq = keras.Input(shape=(4**k,))
+
+    return input_seq
+
+def define_encoder(k):
+    input_seq = define_vae_input(k)
+    x = keras.layers.Dense(WIDTH, activation = 'elu')(input_seq)
+    for i in range(DEPTH-1):
+        x = keras.layers.Dense(WIDTH, activation = 'elu')(x)
+    z_mean = keras.layers.Dense(LATENTDIM)(x)
+    z_log_var = keras.layers.Dense(LATENTDIM)(x)
+    z = keras.layers.Lambda(latent_space_sampling, output_shape=(LATENTDIM,), \
+                            name = 'z')([z_mean, z_log_var])
+    encoder = keras.models.Model(input_seq, [z_mean,z_log_var,z], name = 'encoder')
+
+    return encoder
+
+def define_decoder(k):
+    #Check whether you need the layer part here
+    decoder_input = keras.layers.Input(shape=(LATENTDIM,), name='ls_sampling')
+    x = keras.layers.Dense(WIDTH, activation = "linear")(decoder_input)
+    for i in range(DEPTH-1):
+        x = keras.layers.Dense(WIDTH, activation = "elu")(x)
+    output = keras.layers.Dense(4**k, activation = "softplus")(x)
+    decoder=keras.models.Model(decoder_input, output, name = 'decoder')
+
+    return decoder
+
+def define_vae(k):
+    input_seq = define_vae_input(k)
+    encoder = define_encoder(k)
+    decoder = define_decoder(k)
+    output_seq = decoder(encoder(input_seq)[2])
+    vae = keras.models.Model(input_seq, output_seq, name='vae')
+
+    return vae, encoder
+
+def predict_latent_pos(kmer_table, vae_samples, k, vae_weights_file):
+
+    '''
+    Predict latent space of test samples based on reference database
+    '''
+
+    vae, encoder = define_vae(k)
+
+    vae.load_weights(vae_weights_file)
+    predicted_latent_pos = encoder.predict(kmer_table)
+
+    predicted_latent_pos_df = pd.DataFrame(index=vae_samples, columns=['mean1', 'mean2', 'mean3',\
+                                                                       'sd1', 'sd2', 'sd3'])
+    for i in range(3):
+        predicted_latent_pos_df[f'mean{i+1}'] = predicted_latent_pos[0][:,i]
+        predicted_latent_pos_df[f'sd{i+1}'] = predicted_latent_pos[1][:,i]
+
+    return predicted_latent_pos_df
+
+
+
+
 
 
 def vae(args):
@@ -115,11 +190,14 @@ def vae(args):
     hap_df = pd.read_csv(args.haplotypes, sep='\t')
     comb_stats_df = pd.read_csv(args.manifest, sep='\t')
 
-    level, sgp, n_targets, version_name = prep_reference_index(args.reference_version, \
-                                                            args.path_to_refversion)
+    level, sgp, n_targets, vae_weights_file, version_name = prep_reference_index(\
+        args.reference_version, args.path_to_refversion)
     vae_samples, vae_hap_df = select_samples(comb_stats_df, hap_df, level, \
                                                        sgp, n_targets)
     kmer_table = prep_kmers(vae_hap_df, vae_samples, K)
+
+    latent_positions_df = predict_latent_pos(kmer_table, vae_samples, K, vae_weights_file)
+    latent_positions_df.to_csv(f'{args.outdir}/latent_positions.tsv', sep='\t')
 
 
 
