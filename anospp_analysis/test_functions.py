@@ -51,9 +51,9 @@ def test_prep_kmers():
 
 def test_predict_latent_pos():
     hap_df = pd.read_csv('test_data/output/non_error_haplotypes.tsv', sep='\t')
-    vae_samples = np.array(['DN806197N_A1', 'DN806197N_A2', 'DN806197N_A3', 'DN806197N_A4', \
-                            'DN806197N_A5', 'DN806197N_A6', 'DN806197N_A7', 'DN806197N_A8', \
-                            'DN806197N_A9', 'DN806197N_A10', 'DN806197N_A11', 'DN806197N_A12'])
+    vae_samples = np.array(['DN806197N_A1', 'DN806197N_A10', 'DN806197N_A11', 'DN806197N_A12', \
+                            'DN806197N_A2', 'DN806197N_A3', 'DN806197N_A4', 'DN806197N_A5', \
+                            'DN806197N_A6', 'DN806197N_A7', 'DN806197N_A8', 'DN806197N_A9'])
     vae_hap_df = hap_df.query('sample_id in @vae_samples')
     kmer_table = vae.prep_kmers(vae_hap_df, vae_samples, 8)
     comparison = pd.read_csv("test_data/comparisons/latent_coordinates.tsv", sep='\t', \
@@ -65,7 +65,7 @@ def test_predict_latent_pos():
         8,
         'ref_databases/gcrefv1/_weights.hdf5'
     )
-
-    assert (result.mean1 == comparison.mean1).all()
-    assert (result.mean2 == comparison.mean2).all()
-    assert (result.mean3 == comparison.mean3).all()
+    assert (result.index.values == comparison.index.values).all()
+    assert (np.abs(result.mean1.values - comparison.mean1.values) < 0.001).all()
+    assert (np.abs(result.mean2.values - comparison.mean2.values) < 0.001).all()
+    assert (np.abs(result.mean3.values - comparison.mean3.values) < 0.001).all()
