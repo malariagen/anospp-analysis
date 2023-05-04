@@ -8,13 +8,14 @@ readme = "README.md"
 packages = [{include = "anospp_analysis"}]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.10,<3.11"
 pandas = "*"
 numpy = "*"
 seaborn = "*"
 BioPython = "*"
 cutadapt = "*"
 keras = "^2.12.0"
+tensorflow = "^2.12.0"
 
 [tool.poetry.group.dev.dependencies]
 
