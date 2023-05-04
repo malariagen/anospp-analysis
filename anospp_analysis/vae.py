@@ -5,6 +5,8 @@ from collections import OrderedDict
 import os
 import argparse
 import keras
+from scipy.spatial import ConvexHull, Delaunay
+from pygel3d import hmesh
 
 from .util import *
 from .nn import parse_seqids_series, construct_unique_kmer_table
@@ -31,13 +33,17 @@ def prep_reference_index(reference_version, path_to_refversion):
     assert os.path.isfile(f'{reference_path}/selection_criteria.txt'), f'reference version \
         {reference_version} at {reference_path} does not contain required \
         selection_criteria.txt file'
-    level, sgp, n_targets_str = open(f'{reference_path}/selection_criteria.txt').read().split('\t')
-    n_targets = int(n_targets_str)
+    selection_criteria_file = f'{reference_path}/selection_criteria.txt'
 
     assert os.path.isfile(f'{reference_path}/_weights.hdf5'), f'reference version \
         {reference_version} at {reference_path} does not contain required \
         _weights.hdf5 file'
     vae_weights_file = f'{reference_path}/_weights.hdf5'
+
+    assert os.path.isfile(f'{reference_path}/convex_hulls.tsv'), f'reference version \
+        {reference_version} at {reference_path} does not contain required \
+        convex_hulls.tsv file'
+    convex_hulls_df = pd.read_csv(f'{reference_path}/convex_hulls.tsv', sep='\t')
 
     if os.path.isfile(f'{reference_path}/version.txt'):
         with open(f'{reference_path}/version.txt', 'r') as fn:
@@ -48,7 +54,12 @@ def prep_reference_index(reference_version, path_to_refversion):
                         at {reference_path}')
         version_name = 'unknown'
         
-    return level, sgp, n_targets, vae_weights_file, version_name
+    return selection_criteria_file, vae_weights_file, convex_hulls_df, version_name
+
+def read_selection_criteria(selection_criteria_file, comb_stats_df, hap_df):
+    
+    level, sgp, n_targets = open(selection_criteria_file).read().split('\t')
+    return select_samples(comb_stats_df, hap_df, level, sgp, int(n_targets))
 
 def select_samples(comb_stats_df, hap_df, level, sgp, n_targets):
     '''
@@ -174,7 +185,106 @@ def predict_latent_pos(kmer_table, vae_samples, k, vae_weights_file):
 
     return predicted_latent_pos_df
 
+def generate_convex_hulls(convex_hulls_df):
+    '''
+    Read in pre-computed points for convex hulls for each species
+    '''
+    logging.info('setting up convex hulls from reference database')
+    hull_dict = dict()
+    for species in convex_hulls_df.species.unique():
+        pos = convex_hulls_df.loc[convex_hulls_df.species==species, ['mean1', 'mean2', \
+                                                                     'mean3']].values
+        hull = ConvexHull(pos)
+        hull_dict[species] = (pos, hull)
 
+    return hull_dict
+
+def compute_hull_dist(hull, positions):
+    '''
+    Compute the distance to the specified hull for a set of positions
+    '''
+    manifold = hmesh.Manifold().from_triangles(hull.points, hull.simplices)   
+    mesh_dist = hmesh.MeshDistance(manifold)
+    dist = mesh_dist.signed_distance(positions.flatten())
+
+    return np.absolute(dist)
+
+def check_is_in_hull(hull_pos, positions):
+    '''
+    Check whether a set of positions lies inside the specified hull
+    '''
+    if not isinstance(hull_pos,Delaunay):
+        hull = Delaunay(hull_pos)
+
+    in_hull = hull.find_simplex(positions)>=0
+
+    return in_hull
+
+def generate_hull_dist_df(hull_dict, latent_positions_df, unassigned):
+
+    dist_df = pd.DataFrame(index=latent_positions_df.index[unassigned])
+    positions = latent_positions_df.loc[unassigned,['mean1','mean2','mean3']].values
+    for species in hull_dict.keys():
+        dist_df[species] = compute_hull_dist(hull_dict[species][1], positions)
+    return dist_df 
+
+def get_closest_hulls(hull_dict, latent_positions_df, unassigned):
+
+    dist_df = generate_hull_dist_df(hull_dict, latent_positions_df, unassigned)
+    summary_dist_df = pd.DataFrame(index=dist_df.index)
+    summary_dist_df['dist1'] = dist_df.min(axis=1)
+    summary_dist_df['species1'] = dist_df.idxmin(axis=1)
+    summary_dist_df['dist2'] = dist_df.apply(lambda x: x.sort_values()[1], axis=1)
+    summary_dist_df['species2'] = dist_df.apply(lambda x: x.sort_values().index[1], axis=1)
+    print(summary_dist_df)
+    return summary_dist_df
+
+def assign_gam_col_band(latent_positions_df, summary_dist_df):
+    #Determine which samples are in gamcol band
+    gamcol_band = summary_dist_df.loc[(summary_dist_df.species1.isin(['Anopheles_gambiae', \
+                            'Anopheles_coluzzii'])) & (summary_dist_df.species2.isin([\
+                            'Anopheles_gambiae', 'Anopheles_coluzzii'])) & \
+                            (summary_dist_df.dist2<14)]
+    print(f"Uncertain_{gamcol_band.species1.str.split('_', expand=True)[1]}\
+        _{gamcol_band.species2.str.split('_', expand=True)[1]}")
+    #Make assignments for the samples in gamcol band
+    if gamcol_band.shape[0]>0:
+        gamcol_dict = dict(f"Uncertain_{gamcol_band.species1.str.split('_', expand=True)[1]}\
+        _{gamcol_band.species2.str.split('_', expand=True)[1]}") 
+        gamcol_idx_pos = latent_positions_df.sample_id.isin(gamcol_band.index)
+        latent_positions_df.loc[gamcol_idx_pos, 'assigned_species'] = latent_positions_df.loc[\
+            gamcol_idx_pos, 'sample_id'].map(gamcol_dict)
+    return latent_positions_df
+ 
+
+
+def perform_convex_hull_assignments(hull_dict, latent_positions_df):
+    '''
+    Perform convex hull assignments based on latent space positions
+    '''
+    logging.info('performing convex hull assignment')
+    positions = latent_positions_df[['mean1', 'mean2', 'mean3']].values
+    
+    #first check which samples fall inside convex hulls
+    for label in hull_dict.keys():
+        is_in_hull = check_is_in_hull(hull_dict[label][0], positions)
+        latent_positions_df.loc[is_in_hull, 'VAE_species'] = label
+    
+    #Record unassigned samples 
+    unassigned = latent_positions_df.VAE_species.isnull()
+    n_unassigned = unassigned.sum()
+    logging.info(f'{latent_positions_df.shape[0] - n_unassigned} samples fall inside convex hulls, \
+    {n_unassigned} samples still to be assigned')
+    
+    #for the unassigned samples, get distances to two closest hulls
+    if n_unassigned > 0:
+        summary_dist_df = get_closest_hulls(hull_dict, latent_positions_df, unassigned)
+        latent_positions_df = assign_gam_col_band(latent_positions_df, summary_dist_df)
+        print(pd.DataFrame(latent_positions_df.groupby("VAE_species", dropna=False).size()))
+
+
+
+        
 
 
 
@@ -190,14 +300,19 @@ def vae(args):
     hap_df = pd.read_csv(args.haplotypes, sep='\t')
     comb_stats_df = pd.read_csv(args.manifest, sep='\t')
 
-    level, sgp, n_targets, vae_weights_file, version_name = prep_reference_index(\
+    selection_criteria_file, vae_weights_file, convex_hulls_df, version_name = prep_reference_index(\
         args.reference_version, args.path_to_refversion)
-    vae_samples, vae_hap_df = select_samples(comb_stats_df, hap_df, level, \
-                                                       sgp, n_targets)
+    vae_samples, vae_hap_df = read_selection_criteria(selection_criteria_file,\
+                                 comb_stats_df, hap_df)
     kmer_table = prep_kmers(vae_hap_df, vae_samples, K)
 
     latent_positions_df = predict_latent_pos(kmer_table, vae_samples, K, vae_weights_file)
     latent_positions_df.to_csv(f'{args.outdir}/latent_positions.tsv', sep='\t')
+
+    hull_dict = generate_convex_hulls(convex_hulls_df)
+
+    ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
+
 
 
 
