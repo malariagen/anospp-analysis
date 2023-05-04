@@ -2,6 +2,7 @@ import vae
 import nn
 import pandas as pd
 import numpy as np
+from scipy.spatial import ConvexHull
 
 def test_select_samples():
     assignment_df = pd.read_csv('test_data/output/nn_assignment.tsv', sep='\t')
@@ -69,3 +70,41 @@ def test_predict_latent_pos():
     assert (np.abs(result.mean1.values - comparison.mean1.values) < 0.001).all()
     assert (np.abs(result.mean2.values - comparison.mean2.values) < 0.001).all()
     assert (np.abs(result.mean3.values - comparison.mean3.values) < 0.001).all()
+
+def test_compute_hull_dist():
+    hull_df = pd.read_csv("ref_databases/gcrefv1/convex_hulls.tsv", sep='\t')
+    hull = ConvexHull(hull_df.loc[hull_df.species=='Anopheles_coluzzii', ['mean1', 'mean2', \
+                                                                          'mean3']].values)
+    pos = hull_df.loc[hull_df.species=='Anopheles_gambiae', ['mean1', 'mean2', 'mean3']].values
+
+    result = vae.compute_hull_dist(
+        hull, 
+        pos
+    )
+
+    targets = np.array([[6.309639,13.038807,6.575978,68.123405,7.7456098,24.679714,
+                        72.25647,76.74071,6.5742974,17.787983,66.25579,73.59986,
+                        76.7035,5.73891,63.732883,23.117966,8.014164,18.58697,
+                        30.661522,31.2423,47.31292,49.995487,49.006126,44.459553,
+                        52.336056,23.796885,59.219532,69.760345,26.823551,4.229266,
+                        77.5418,53.13494,5.8358717,8.693414,2.8645864]])
+    
+    assert (np.abs(result-targets)<0.0001).all()
+
+def test_check_is_in_hull():
+    hull_df = pd.read_csv("ref_databases/gcrefv1/convex_hulls.tsv", sep='\t')
+    hull_pos = hull_df.loc[hull_df.species=='Anopheles_coluzzii', ['mean1', 'mean2', \
+                                                                          'mean3']].values
+    positions = np.array([[-84.87537,-4.0789433,-18.389744],
+                          [-61.125664,8.855109,-19.726767],
+                          [-85, 12, -30],
+                          [-74.1326,14.065717,-28.022907],
+                          [-52.084938,44.803505,-41.526775],
+                          [-6.032356,-62.52318,40.535034]])
+    
+    result = vae.check_is_in_hull(
+        hull_pos, 
+        positions)
+
+    assert (result == np.array([False, False, True, True, False, False])).all()
+
