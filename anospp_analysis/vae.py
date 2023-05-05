@@ -236,7 +236,6 @@ def get_closest_hulls(hull_dict, latent_positions_df, unassigned):
     summary_dist_df['species1'] = dist_df.idxmin(axis=1)
     summary_dist_df['dist2'] = dist_df.apply(lambda x: x.sort_values()[1], axis=1)
     summary_dist_df['species2'] = dist_df.apply(lambda x: x.sort_values().index[1], axis=1)
-    print(summary_dist_df)
     return summary_dist_df
 
 def assign_gam_col_band(latent_positions_df, summary_dist_df):
@@ -244,19 +243,20 @@ def assign_gam_col_band(latent_positions_df, summary_dist_df):
     gamcol_band = summary_dist_df.loc[(summary_dist_df.species1.isin(['Anopheles_gambiae', \
                             'Anopheles_coluzzii'])) & (summary_dist_df.species2.isin([\
                             'Anopheles_gambiae', 'Anopheles_coluzzii'])) & \
-                            (summary_dist_df.dist2<14)]
-    print(f"Uncertain_{gamcol_band.species1.str.split('_', expand=True)[1]}\
-        _{gamcol_band.species2.str.split('_', expand=True)[1]}")
+                            (summary_dist_df.dist2<14)].copy()
     #Make assignments for the samples in gamcol band
     if gamcol_band.shape[0]>0:
-        gamcol_dict = dict(f"Uncertain_{gamcol_band.species1.str.split('_', expand=True)[1]}\
-        _{gamcol_band.species2.str.split('_', expand=True)[1]}") 
-        gamcol_idx_pos = latent_positions_df.sample_id.isin(gamcol_band.index)
-        latent_positions_df.loc[gamcol_idx_pos, 'assigned_species'] = latent_positions_df.loc[\
-            gamcol_idx_pos, 'sample_id'].map(gamcol_dict)
-    return latent_positions_df
+        gamcol_band['label'] = 'Uncertain_'+gamcol_band.species1.str.split('_', expand=True)[1]+'\
+_'+gamcol_band.species2.str.split('_', expand=True)[1]
+        gamcol_dict = dict(gamcol_band.label) 
+        latent_positions_df.loc[gamcol_band.index, 'VAE_species'] = latent_positions_df.loc[\
+            gamcol_band.index].index.map(gamcol_dict)
+    return latent_positions_df, gamcol_band.shape[0]
  
-
+def get_unassigned_samples(latent_positions_df):
+    unassigned = latent_positions_df.VAE_species.isnull()
+    n_unassigned = unassigned.sum()
+    return unassigned, n_unassigned
 
 def perform_convex_hull_assignments(hull_dict, latent_positions_df):
     '''
@@ -271,16 +271,20 @@ def perform_convex_hull_assignments(hull_dict, latent_positions_df):
         latent_positions_df.loc[is_in_hull, 'VAE_species'] = label
     
     #Record unassigned samples 
-    unassigned = latent_positions_df.VAE_species.isnull()
-    n_unassigned = unassigned.sum()
-    logging.info(f'{latent_positions_df.shape[0] - n_unassigned} samples fall inside convex hulls, \
-    {n_unassigned} samples still to be assigned')
+    unassigned, n_unassigned = get_unassigned_samples(latent_positions_df)
+    logging.info(f'{latent_positions_df.shape[0] - n_unassigned} samples fall inside convex hulls; \
+{n_unassigned} samples still to be assigned')
     
     #for the unassigned samples, get distances to two closest hulls
     if n_unassigned > 0:
         summary_dist_df = get_closest_hulls(hull_dict, latent_positions_df, unassigned)
-        latent_positions_df = assign_gam_col_band(latent_positions_df, summary_dist_df)
-        print(pd.DataFrame(latent_positions_df.groupby("VAE_species", dropna=False).size()))
+        latent_positions_df, n_newly_assigned = assign_gam_col_band(latent_positions_df, \
+                                                                    summary_dist_df)
+        unassigned, n_unassigned = get_unassigned_samples(latent_positions_df)
+        logging.info(f'{n_newly_assigned} samples assigned to uncertain_gambiae_coluzzii or \
+uncertain_coluzzii_gambiae; {n_unassigned} samples still to be assigned')
+    if n_unassigned > 0:
+        
 
 
 
