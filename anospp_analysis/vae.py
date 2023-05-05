@@ -17,6 +17,7 @@ LATENTDIM = 3
 SEED = 374173
 WIDTH = 128
 DEPTH = 6
+DISTRATIO = 7
 
 def prep_reference_index(reference_version, path_to_refversion):
     '''
@@ -220,9 +221,14 @@ def check_is_in_hull(hull_pos, positions):
 
     return in_hull
 
+def get_unassigned_samples(latent_positions_df):
+    unassigned = latent_positions_df.loc[latent_positions_df.VAE_species.isnull()].index
+    n_unassigned = len(unassigned)
+    return unassigned, n_unassigned
+
 def generate_hull_dist_df(hull_dict, latent_positions_df, unassigned):
 
-    dist_df = pd.DataFrame(index=latent_positions_df.index[unassigned])
+    dist_df = pd.DataFrame(index=unassigned)
     positions = latent_positions_df.loc[unassigned,['mean1','mean2','mean3']].values
     for species in hull_dict.keys():
         dist_df[species] = compute_hull_dist(hull_dict[species][1], positions)
@@ -252,11 +258,19 @@ _'+gamcol_band.species2.str.split('_', expand=True)[1]
         latent_positions_df.loc[gamcol_band.index, 'VAE_species'] = latent_positions_df.loc[\
             gamcol_band.index].index.map(gamcol_dict)
     return latent_positions_df, gamcol_band.shape[0]
- 
-def get_unassigned_samples(latent_positions_df):
-    unassigned = latent_positions_df.VAE_species.isnull()
-    n_unassigned = unassigned.sum()
-    return unassigned, n_unassigned
+
+def assign_to_closest_hull(latent_positions_df, summary_dist_df, unassigned):
+    '''
+    Assign samples that are much closer to one hull than to all others to that hull
+    Currently defined as a distance 7 times smaller than all others
+    '''
+    fuzzy_hulls = summary_dist_df.loc[(DISTRATIO*summary_dist_df.dist1 < \
+        summary_dist_df.dist2)&(summary_dist_df.index.isin(unassigned))].copy()
+    if fuzzy_hulls.shape[0]>0:
+        fuzzy_hulls_dict = dict(fuzzy_hulls.species1)
+        latent_positions_df.loc[unassigned, 'VAE_species'] = latent_positions_df.loc[\
+            unassigned].index.map(fuzzy_hulls_dict)
+    return latent_positions_df, fuzzy_hulls.shape[0]
 
 def perform_convex_hull_assignments(hull_dict, latent_positions_df):
     '''
@@ -284,7 +298,14 @@ def perform_convex_hull_assignments(hull_dict, latent_positions_df):
         logging.info(f'{n_newly_assigned} samples assigned to uncertain_gambiae_coluzzii or \
 uncertain_coluzzii_gambiae; {n_unassigned} samples still to be assigned')
     if n_unassigned > 0:
-        
+        latent_positions_df, n_newly_assigned = assign_to_closest_hull(latent_positions_df, \
+                                                                summary_dist_df, unassigned)
+        unassigned, n_unassigned = get_unassigned_samples(latent_positions_df)
+        logging.info(f'{n_newly_assigned} additional samples assigned to a single species; \
+{n_unassigned} samples still to be assigned')
+    print(latent_positions_df.groupby('VAE_species', dropna=False).size())
+
+
 
 
 
