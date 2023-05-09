@@ -254,7 +254,6 @@ def assign_gam_col_band(latent_positions_df, summary_dist_df):
     if gamcol_band.shape[0]>0:
         gamcol_dict = dict(gamcol_band.apply(lambda row: 'Uncertain_'+row.species1.split('_')[1]+\
                                              '_'+row.species2.split('_')[1], axis=1))
-        print(gamcol_dict) 
         latent_positions_df.loc[gamcol_band.index, 'VAE_species'] = latent_positions_df.loc[\
             gamcol_band.index].index.map(gamcol_dict)
     return latent_positions_df, gamcol_band.shape[0]
@@ -323,6 +322,49 @@ uncertain_coluzzii_gambiae; {n_unassigned} samples still to be assigned')
 
     return latent_positions_df
 
+def finalise_assignments(comb_stats_df, ch_assignments_df):
+
+    logging.info('finalising mosquito species assignments')
+
+    #Add VAE columns
+    m1dict = dict(ch_assignments_df.mean1)
+    m2dict = dict(ch_assignments_df.mean2)
+    m3dict = dict(ch_assignments_df.mean3)
+    vaespeciesdict = dict(ch_assignments_df.VAE_species)
+
+    comb_stats_df['LS1'] = comb_stats_df.sample_id.map(m1dict)
+    comb_stats_df['LS2'] = comb_stats_df.sample_id.map(m2dict)
+    comb_stats_df['LS3'] = comb_stats_df.sample_id.map(m3dict)
+    comb_stats_df['VAE_species'] = comb_stats_df.sample_id.map(vaespeciesdict)
+
+    #Get final species call
+    #Samples assigned by VAE
+    comb_stats_df['species_call'] = comb_stats_df.VAE_species
+    comb_stats_df.loc[~comb_stats_df.species_call.isnull(), 'call_method'] = 'VAE'
+    
+    #Samples assigned by NN
+    for level in ['fine', 'int', 'coarse']:
+        leveldict = dict(zip(comb_stats_df.sample_id, comb_stats_df[f'res_{level}']))
+        comb_stats_df.loc[(comb_stats_df.species_call.isnull()) & \
+            (~comb_stats_df[f'res_{level}'].isnull()), 'call_method'] = f'NN_{level}'
+        comb_stats_df.loc[comb_stats_df.call_method == f'NN_{level}', \
+            'species_call'] = comb_stats_df.loc[comb_stats_df.call_method == \
+            f'NN_{level}', 'sample_id'].map(leveldict)
+        
+    #Rainbow samples
+    comb_stats_df.loc[(comb_stats_df.species_call.isnull()) & \
+        (comb_stats_df.NN_assignment=='yes'), 'call_method'] = 'NN'
+    comb_stats_df.loc[comb_stats_df.call_method=='NN', 'species_call'] = 'RAINBOW_SAMPLE'
+
+    #Samples with too few targets
+    comb_stats_df.loc[comb_stats_df.NN_assignment=='no', 'call_method'] = 'TOO_FEW_TARGETS'
+    comb_stats_df.loc[comb_stats_df.NN_assignment=='no', 'species_call'] = 'TOO_FEW_TARGETS'
+
+    assert not comb_stats_df.species_call.isnull().any(), 'some samples not assigned'
+    assert not comb_stats_df.call_method.isnull().any(), 'some samples not assigned'
+
+    return comb_stats_df
+
 
 def vae(args):
 
@@ -339,20 +381,19 @@ def vae(args):
         args.reference_version, args.path_to_refversion)
     vae_samples, vae_hap_df = read_selection_criteria(selection_criteria_file,\
                                  comb_stats_df, hap_df)
-    kmer_table = prep_kmers(vae_hap_df, vae_samples, K)
+    if len(vae_samples) == 0:
+        logging.info("No samples to be run through VAE - skipping to finalising assignments")
+        ch_assignment_df = pd.DataFrame(columns = ['mean1','mean2','mean3','sd1','sd2','sd3','VAE_species'])
 
-    latent_positions_df = predict_latent_pos(kmer_table, vae_samples, K, vae_weights_file)
-    latent_positions_df.to_csv(f'{args.outdir}/latent_positions.tsv', sep='\t')
-
-    hull_dict = generate_convex_hulls(convex_hulls_df)
-
-    ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
-
-
-
-
-
+    else:
+        kmer_table = prep_kmers(vae_hap_df, vae_samples, K)
+        latent_positions_df = predict_latent_pos(kmer_table, vae_samples, K, vae_weights_file)
+        hull_dict = generate_convex_hulls(convex_hulls_df)
+        ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
+        ch_assignment_df.to_csv(f'{args.outdir}/ch_assignments.tsv', sep='\t')
     
+    final_assignments = finalise_assignments(comb_stats_df, ch_assignment_df)
+    final_assignments.to_csv(f'{args.outdir}/final_assignments.tsv', sep='\t', index=False)
 
     logging.info('All done!')
 
