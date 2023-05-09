@@ -108,3 +108,21 @@ def test_check_is_in_hull():
 
     assert (result == np.array([False, False, True, True, False, False])).all()
 
+def test_perform_convex_hull_assignments():
+    latent_pos_df = pd.read_csv("test_data/comparisons/latent_coordinates.tsv", sep='\t', \
+                             index_col=0)
+    vae_samples = np.array(['DN806197N_A1', 'DN806197N_A10', 'DN806197N_A11', 'DN806197N_A12', \
+                            'DN806197N_A2', 'DN806197N_A3', 'DN806197N_A4', 'DN806197N_A5', \
+                            'DN806197N_A6', 'DN806197N_A7', 'DN806197N_A8', 'DN806197N_A9'])
+    latent_pos_df = latent_pos_df.query('sample_id in @vae_samples')
+    hull_dict = vae.generate_convex_hulls(pd.read_csv("ref_databases/gcrefv1/convex_hulls.tsv", sep='\t'))
+
+    result = vae.perform_convex_hull_assignments(
+        hull_dict, 
+        latent_pos_df
+    )
+    assert (result.VAE_species.values == np.array(['Uncertain_coluzzii_tengrela_gambiae', 'Anopheles_coluzzii', \
+                'Anopheles_coluzzii', 'Anopheles_coluzzii', 'Anopheles_coluzzii', 'Uncertain_tengrela_coluzzii_gambiae',\
+                'Anopheles_coluzzii', 'Uncertain_coluzzii_tengrela', 'Anopheles_coluzzii', \
+                'Anopheles_coluzzii', 'Anopheles_coluzzii', 'Anopheles_coluzzii'])).all()
+    
