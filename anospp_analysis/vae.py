@@ -360,31 +360,35 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict):
     ax.scatter(ref_coordinates.mean1, ref_coordinates.mean3, \
                c=ref_coordinates.color.values, alpha=.6, zorder=1)
     
-    #Plot samples assigned to single species
-    for species in single:
-        sub = ch_assignments.query('VAE_species == @species')
-        if species=='Anopheles_bwambae-fontenillei':
-            label= f'Anopheles_bwambae-\nfontenillei: {species_dict[species]}'
-        else:
-            label = f'{species}: {species_dict[species]}'
-        ax.scatter(sub.mean1, sub.mean3, color=colordict[species], marker='^', \
+    if len(single)>0:
+        #Plot samples assigned to single species
+        for species in single:
+            sub = ch_assignments.query('VAE_species == @species')
+            if species=='Anopheles_bwambae-fontenillei':
+                label= f'Anopheles_bwambae-\nfontenillei: {species_dict[species]}'
+            else:
+                label = f'{species}: {species_dict[species]}'
+            ax.scatter(sub.mean1, sub.mean3, color=colordict[species], marker='^', \
                    edgecolor='k', label=label, zorder=2)
-        
-    #Plot samples assigned to two species
-    for species in double:
-        sub = ch_assignments.query('VAE_species == @species')
-        _, sp1, sp2 = species.split('_')
-        #multiple lines on the legend
-        if sp1 == 'bwambae-fontenillei':
-            label = f'Uncertain_bwambae-\nfontenillei_{sp2}: {species_dict[species]}'
-        else:
-            label = f'Uncertain_{sp1}_\n{sp2}: {species_dict[species]}'
-        ax.scatter(sub.mean1, sub.mean3, marker='s', edgecolor=colordict[f'Anopheles_{sp1}'], \
+
+    if len(double)>0:    
+        #Plot samples assigned to two species
+        for species in double:
+            sub = ch_assignments.query('VAE_species == @species')
+            _, sp1, sp2 = species.split('_')
+            #multiple lines on the legend
+            if sp1 == 'bwambae-fontenillei':
+                label = f'Uncertain_bwambae-\nfontenillei_{sp2}: {species_dict[species]}'
+            else:
+                label = f'Uncertain_{sp1}_\n{sp2}: {species_dict[species]}'
+            ax.scatter(sub.mean1, sub.mean3, marker='s', edgecolor=colordict[f'Anopheles_{sp1}'], \
                    facecolor=colordict[f'Anopheles_{sp2}'], linewidth=1.5, zorder=2, label=label)
-        
-    #Plot remaining samples:
-    sub = ch_assignments.query('VAE_species in @multi')
-    ax.scatter(sub.mean1, sub.mean3, color='k', marker='s', zorder=3, label=f'other: {sub.shape[0]}')
+
+    if len(multi)>0:    
+        #Plot remaining samples:
+        sub = ch_assignments.query('VAE_species in @multi')
+        ax.scatter(sub.mean1, sub.mean3, color='k', marker='s', zorder=3, \
+                   label=f'other: {sub.shape[0]}')
 
     ax.set_xlabel('LS1')
     ax.set_ylabel('LS3')
@@ -436,6 +440,18 @@ def finalise_assignments(comb_stats_df, ch_assignments_df):
 
     return comb_stats_df
 
+def generate_summary(ch_assignments, comb_stats_df, version_name):
+    summary = []
+    summary.append(f'Convex hull assignment assignment using reference version {version_name}')
+    summary.append(f'On run containing {comb_stats_df.sample_id.nunique()} samples')
+    summary.append(f'{ch_assignments.index.nunique()} samples met the VAE selection criteria')
+    summary.append(f'Samples are assigned to the following labels:')
+    assignment_dict = dict(ch_assignments.groupby('VAE_species').size())
+    for key in assignment_dict.keys():
+        summary.append(f'{key}:\t {assignment_dict[key]}')
+
+    return '\n'.join(summary)
+
 
 def vae(args):
 
@@ -462,11 +478,17 @@ def vae(args):
         hull_dict = generate_convex_hulls(convex_hulls_df)
         ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
         ch_assignment_df.to_csv(f'{args.outdir}/ch_assignments.tsv', sep='\t')
-        fig, _ = plot_VAE_assignments(ch_assignment_df, ref_coordinates, colordict)
-        fig.savefig(f'{args.outdir}/VAE_assignment.png')
+        if not bool(args.no_plotting):
+            fig, _ = plot_VAE_assignments(ch_assignment_df, ref_coordinates, colordict)
+            fig.savefig(f'{args.outdir}/VAE_assignment.png')
     
     final_assignments = finalise_assignments(comb_stats_df, ch_assignment_df)
     final_assignments.to_csv(f'{args.outdir}/final_assignments.tsv', sep='\t', index=False)
+
+    summary_text = generate_summary(ch_assignment_df, comb_stats_df, version_name)
+    logging.info(f'writing summary file to {args.outdir}')
+    with open(f'{args.outdir}/summary.txt', 'w') as fn:
+        fn.write(summary_text)
 
     logging.info('All done!')
 
