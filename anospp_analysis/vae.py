@@ -46,6 +46,19 @@ def prep_reference_index(reference_version, path_to_refversion):
         convex_hulls.tsv file'
     convex_hulls_df = pd.read_csv(f'{reference_path}/convex_hulls.tsv', sep='\t')
 
+    if not os.path.isfile(f'{reference_path}/colors.tsv'):
+            logging.warning('No colors defined for plotting.')
+            colorsdict = dict()
+    else:
+        colors = pd.read_csv(f'{reference_path}/colors.tsv',sep='\t', index_col=0)
+        colorsdict = dict(colors.color)
+
+    if not os.path.isfile(f'{reference_path}/latent_coordinates.tsv'):
+            logging.warning('No reference coordinates defined for plotting.')
+            ref_coord = pd.DataFrame()
+    else:
+        ref_coord = pd.read_csv(f'{reference_path}/latent_coordinates.tsv',sep='\t')
+
     if os.path.isfile(f'{reference_path}/version.txt'):
         with open(f'{reference_path}/version.txt', 'r') as fn:
             for line in fn:
@@ -55,7 +68,8 @@ def prep_reference_index(reference_version, path_to_refversion):
                         at {reference_path}')
         version_name = 'unknown'
         
-    return selection_criteria_file, vae_weights_file, convex_hulls_df, version_name
+    return (selection_criteria_file, vae_weights_file, convex_hulls_df, colorsdict, \
+        ref_coord, version_name)
 
 def read_selection_criteria(selection_criteria_file, comb_stats_df, hap_df):
     
@@ -322,6 +336,63 @@ uncertain_coluzzii_gambiae; {n_unassigned} samples still to be assigned')
 
     return latent_positions_df
 
+def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict):
+
+    logging.info('generating VAE plots')
+    #get assignment categories
+    single, double, multi = [], [], []
+    species_dict = dict(ch_assignments.groupby('VAE_species').size())
+    for key in species_dict.keys():
+        #for single species assignment
+        if key.startswith('Anopheles_'):
+            single.append(key)
+        #for uncertain between two species
+        elif len(key.split('_')) == 3:
+            double.append(key)
+        #for uncertain between more than two species
+        else:
+            multi.append(key)
+
+    fig, ax = plt.subplots(figsize=(8,8))
+
+    #Plot reference dataset
+    ref_coordinates['color'] = ref_coordinates.VAE_species.map(colordict)
+    ax.scatter(ref_coordinates.mean1, ref_coordinates.mean3, \
+               c=ref_coordinates.color.values, alpha=.6, zorder=1)
+    
+    #Plot samples assigned to single species
+    for species in single:
+        sub = ch_assignments.query('VAE_species == @species')
+        if species=='Anopheles_bwambae-fontenillei':
+            label= f'Anopheles_bwambae-\nfontenillei: {species_dict[species]}'
+        else:
+            label = f'{species}: {species_dict[species]}'
+        ax.scatter(sub.mean1, sub.mean3, color=colordict[species], marker='^', \
+                   edgecolor='k', label=label, zorder=2)
+        
+    #Plot samples assigned to two species
+    for species in double:
+        sub = ch_assignments.query('VAE_species == @species')
+        _, sp1, sp2 = species.split('_')
+        #multiple lines on the legend
+        if sp1 == 'bwambae-fontenillei':
+            label = f'Uncertain_bwambae-\nfontenillei_{sp2}: {species_dict[species]}'
+        else:
+            label = f'Uncertain_{sp1}_\n{sp2}: {species_dict[species]}'
+        ax.scatter(sub.mean1, sub.mean3, marker='s', edgecolor=colordict[f'Anopheles_{sp1}'], \
+                   facecolor=colordict[f'Anopheles_{sp2}'], linewidth=1.5, zorder=2, label=label)
+        
+    #Plot remaining samples:
+    sub = ch_assignments.query('VAE_species in @multi')
+    ax.scatter(sub.mean1, sub.mean3, color='k', marker='s', zorder=3, label=f'other: {sub.shape[0]}')
+
+    ax.set_xlabel('LS1')
+    ax.set_ylabel('LS3')
+        
+    legend = ax.legend(loc='lower right', prop={'size': 9})
+
+    return fig, ax
+
 def finalise_assignments(comb_stats_df, ch_assignments_df):
 
     logging.info('finalising mosquito species assignments')
@@ -377,8 +448,8 @@ def vae(args):
     hap_df = pd.read_csv(args.haplotypes, sep='\t')
     comb_stats_df = pd.read_csv(args.manifest, sep='\t')
 
-    selection_criteria_file, vae_weights_file, convex_hulls_df, version_name = prep_reference_index(\
-        args.reference_version, args.path_to_refversion)
+    selection_criteria_file, vae_weights_file, convex_hulls_df, colordict, ref_coordinates, \
+        version_name = prep_reference_index(args.reference_version, args.path_to_refversion)
     vae_samples, vae_hap_df = read_selection_criteria(selection_criteria_file,\
                                  comb_stats_df, hap_df)
     if len(vae_samples) == 0:
@@ -391,6 +462,8 @@ def vae(args):
         hull_dict = generate_convex_hulls(convex_hulls_df)
         ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
         ch_assignment_df.to_csv(f'{args.outdir}/ch_assignments.tsv', sep='\t')
+        fig, _ = plot_VAE_assignments(ch_assignment_df, ref_coordinates, colordict)
+        fig.savefig(f'{args.outdir}/VAE_assignment.png')
     
     final_assignments = finalise_assignments(comb_stats_df, ch_assignment_df)
     final_assignments.to_csv(f'{args.outdir}/final_assignments.tsv', sep='\t', index=False)
