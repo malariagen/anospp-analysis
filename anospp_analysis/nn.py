@@ -402,7 +402,7 @@ def plot_assignment_proportions(nn_level_result_df, level_label, colors, nn_asgn
     
     logging.info(f'Generate {level_label} level plots')
     #Generate bar plots at given assignment level
-    width = max(20, .5*nn_level_result_df.shape[0])
+    width = min(20, .5*nn_level_result_df.shape[0])
     fig, ax = plt.subplots(figsize=(width,7))
     nn_level_result_df.plot(kind='bar', stacked=True, width=1, ax=ax, color=colors)
     ax.set_xticklabels('')
