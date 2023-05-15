@@ -6,10 +6,9 @@ import os
 import argparse
 import keras
 from scipy.spatial import ConvexHull, Delaunay
-from pygel3d import hmesh
 
-from .util import *
-from .nn import parse_seqids_series, construct_unique_kmer_table
+from util import *
+from nn import parse_seqids_series, construct_unique_kmer_table
 
 #Variables
 K = 8
@@ -213,6 +212,127 @@ def generate_convex_hulls(convex_hulls_df):
         hull_dict[species] = (pos, hull)
 
     return hull_dict
+
+def project_point_to_plane(p, a,b,c):
+    '''
+    project point p down to the plane specified by vertices a,b,c
+    in 3d space
+    '''
+    cross_bc = np.cross(b-a, c-a)
+    #get z, the unit vector perpendicular to the plane
+    z = cross_bc/np.sqrt(np.dot(cross_bc, cross_bc))
+    #compute h, the distance from p to the plane
+    h = np.dot(p, z)
+    #get q, the projection of p onto the plane
+    q = p - h * z
+
+    return q, h
+
+def determine_halfplanes(q, a,b,c):
+    '''
+    determine in which halfplane point q is
+    w.r.t. the edges defined by the vertices a,b,c
+    for each edge, True indicates that the point is in the same 
+    halfplane as the triangle defined by a,b,c
+    '''
+    #check whether the crossproduct of q and edge ab
+    #is in the same direction as the crossproduct of edge ac and ab
+    ab = np.dot(np.cross(q-a, b-a), np.cross(c-a, b-a)) >= 0
+    #same for other edges
+    bc = np.dot(np.cross(q-b,c-b), np.cross(a-b,c-b)) >= 0
+    ca = np.dot(np.cross(q-c,a-c), np.cross(b-c,a-c)) >= 0
+    
+    #return array of booleans in this order
+    #such that we select the appropriate vertices or edges in distance computation
+    return np.array([bc, ca, ab])
+
+def compute_dist_to_vertex(p, v):
+    '''
+    compute euclidean distance from point p to v
+    '''
+    return np.sqrt(np.dot(p-v, p-v))
+
+def compute_dist_to_edge(p, v, w):
+    '''
+    compute euclidean distance from point to line specified by edge
+    '''
+    # u is unit vector in the direction of the line vw
+    u = (w-v)/np.sqrt(np.dot(w-v, w-v))
+    #projection of p onto u
+    q = np.dot(p-v,u)*u
+    #distance is length of difference p and q
+    d = np.sqrt(np.dot(p-v-q, p-v-q))
+    
+    return d
+
+def choose_edge_or_vertex(p, q, vertices):
+    '''
+    if the halfplane test indicates that q is above two and
+    below one edge, we have to determine whether it's closest to 
+    the edge it's below, or to one of the vertices defining the edge
+    it's closest to the edge, if the projection of q onto the line
+    defined by the edge, falls on the edge itself (and not on its extension)
+    '''
+    v, w = vertices[0], vertices[1]
+    #length of edge
+    le = np.sqrt(np.dot(w-v,w-v))
+    #unit vector in direction of the edge vw
+    u = (w-v)/le
+    #length of projection of q
+    lq = np.dot(q-v,u)
+    
+    if lq < 0:
+        # vertex v is closests
+        d = compute_dist_to_vertex(p, v)       
+    elif lq > le:
+        #vertex w is closest
+        d = compute_dist_to_vertex(p, w)  
+    else:
+        #edge vw is closest
+        d = compute_dist_to_edge(p, v, w)
+    return d
+
+def compute_distance_to_surface(p, vertices):
+    '''
+    compute distance of point p to the simplex spanned by vertices
+    in 3d
+    '''
+    a,b,c = vertices[0], vertices[1], vertices[2]
+    #project the point to the plane of the simplex
+    q, h = project_point_to_plane(p, a, b, c)
+    #perform halfplanes test
+    half_planes = determine_halfplanes(q, a, b, c)
+    #if inside the triangle, dist is h
+    if half_planes.sum()==3:
+        return np.abs(h)
+    #if closest to vertex
+    elif half_planes.sum()==1:
+        d = compute_dist_to_vertex(p, vertices[half_planes][0])
+        return d
+    #if below one half plane
+    #determine whether it's closest to edge or vertex
+    elif half_planes.sum()==2:
+        d = choose_edge_or_vertex(p, q, vertices[half_planes])
+        return d
+    else:
+        logging.error('half plane test indicates invalid projection')
+
+def compute_distance_to_hull(hull, positions):
+    '''
+    compute the distance of all given positions
+    to the given convex hull
+    in 3d
+    '''
+    #array to store distances to all simplices
+    dists = np.zeros((positions.shape[0], hull.simplices.shape[0]))
+    for i, s in enumerate(hull.simplices):
+        #compute distance to each simplex in turn
+        dists[:,i] = np.array([compute_distance_to_surface(p, hull.points[s]) for p in positions])
+    #get the distance to the closest simplex for each point
+    print(dists)
+    distances = dists.min(axis=1)
+
+    return distances
 
 def compute_hull_dist(hull, positions):
     '''
