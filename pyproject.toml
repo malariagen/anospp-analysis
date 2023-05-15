@@ -14,12 +14,16 @@ numpy = "*"
 seaborn = "*"
 BioPython = "*"
 cutadapt = "*"
+toytree = "*"
+toyplot = "*"
+bokeh = "*"
 
 [tool.poetry.group.dev.dependencies]
 
 [tool.poetry.scripts]
 anospp-prep = "anospp_analysis.prep:main"
 anospp-qc = "anospp_analysis.qc:main"
+anospp-plasm = "anospp_analysis.plasm:main"
 anospp-nn = "anospp_analysis.nn:main"
 
 [build-system]
