@@ -299,7 +299,7 @@ def qc(args):
             fig.savefig(plate_hm_fn)
             plt.close(fig)
 
-    logging.info('ANOSPP data QC ended')
+    logging.info('ANOSPP QC complete')
 
 def main():
     

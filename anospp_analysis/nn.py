@@ -430,7 +430,7 @@ def nn(args):
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-    logging.info(f'Starting NN assignment for {comb_stats_df.sample_id.nunique()} samples on current run')
+    logging.info(f'starting NN assignment for {comb_stats_df.sample_id.nunique()} samples on current run')
     mosq_hap_df = prep_mosquito_haps(hap_df, args.hap_read_count_threshold, \
                                      args.hap_reads_fraction_threshold)
 
@@ -475,7 +475,7 @@ def nn(args):
             fig, _ = plot_assignment_proportions(results_df[level], level, colors[level], args.nn_assignment_threshold)
             fig.savefig(f'{args.outdir}/{level}_assignment.png')
 
-    logging.info('All done!')
+    logging.info('ANOSPP NN complete')
 
     
 def main():
