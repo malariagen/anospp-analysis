@@ -113,9 +113,9 @@ def parse_seqid(seqid):
     '''
     Parse seqid passed as a string 
     '''
-    split_seqid = pd.DataFrame([seqid.split('-')])
+    split_seqid = seqid.split('-')
 
-    assert split_seqid[0].isin(MOSQ_TARGETS).all(), f'seqid {seqid} refers to a non-mosquito target'
+    assert split_seqid[0] in MOSQ_TARGETS, f'seqid {seqid} refers to a non-mosquito target'
     try:
         parsed_seqid = (int(split_seqid[0]), int(split_seqid[1]))
     except:
