@@ -145,8 +145,6 @@ def prep_samples(samples_fn):
     load sample manifest used for anospp pipeline
     '''
 
-    
-
     # allow reading from tsv (new style) or csv (old style)
     if samples_fn.endswith('csv'):
         logging.info(f'preparing sample manifest from legacy file {samples_fn}')
@@ -221,9 +219,13 @@ def prep_stats(stats_fn):
     logging.info(f'preparing DADA2 statistics from {stats_fn}')
 
     stats_df = pd.read_csv(stats_fn, sep='\t')
-    # compatibility with legacy samples column names
+
     stats_df.rename(columns={
-        's_Sample':'sample_id'
+        # compatibility with legacy format
+        's_Sample':'sample_id',
+        # compatibility with new format 
+        'sample':'sample_id',
+        'DADA2_input':'input'
         },
         inplace=True)
     
@@ -241,6 +243,7 @@ def prep_stats(stats_fn):
     stats_df['denoised'] = stats_df[['denoisedF','denoisedR']].min(axis=1)
     # legacy stats calculated separately for each target, merging
     if 'target' in stats_df.columns:
+        logging.info(f'summarising legacy DADA2 statistics across targets')
         stats_df = stats_df.groupby('sample_id').sum(numeric_only=True).reset_index()
     # add final read counts for comatibility with legacy pipeline
     # that had a post-filtering step

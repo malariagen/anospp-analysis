@@ -180,7 +180,7 @@ def plot_sample_success(comb_stats_df):
     fig, axs = plt.subplots(1,2,figsize=(12,6))
     for col, ax in zip(('final_log10','filter_rate'), axs):
         sns.scatterplot(data=comb_stats_df,
-                x='mosq_targets_recovered',
+                x='raw_mosq_targets_recovered',
                 y=col,
                 hue='plate_id',
                 alpha=.5, 
@@ -273,12 +273,12 @@ def qc(args):
     for col in ('input_log10', 
                 'final_log10',
                 'filter_rate',
-                'mosq_targets_recovered',
+                'raw_mosq_targets_recovered',
                 'P1_log10_reads',
                 'P2_log10_reads',
                 'multiallelic_targets'):
         for lims_plate in (True, False):
-            if col == 'mosq_targets_recovered':
+            if col == 'raw_mosq_targets_recovered':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = 62
             elif col == 'filter_rate':
