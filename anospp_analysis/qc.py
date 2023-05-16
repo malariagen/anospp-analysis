@@ -276,7 +276,7 @@ def qc(args):
                 'raw_mosq_targets_recovered',
                 'P1_log10_reads',
                 'P2_log10_reads',
-                'multiallelic_targets'):
+                'raw_multiallelic_mosq_targets'):
         for lims_plate in (True, False):
             if col == 'raw_mosq_targets_recovered':
                 heatmap_kwargs['vmin'] = 0
