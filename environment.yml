@@ -1,4 +1,4 @@
-name: anospp_analysis
+name: anospp_analysis_dev
 channels:
   - conda-forge
   - bioconda
