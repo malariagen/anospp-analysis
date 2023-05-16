@@ -231,8 +231,8 @@ def qc(args):
     
     logging.info('ANOSPP QC data import started')
 
-    hap_df = prep_hap(args.haplotypes)
     samples_df = prep_samples(args.manifest)
+    hap_df = prep_hap(args.haplotypes)
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)

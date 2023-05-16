@@ -179,21 +179,25 @@ def prep_samples(samples_fn):
     samples_df['run_id'] = samples_df['run_id'].astype(int)
     samples_df['lane_index'] = samples_df['lane_index'].astype(int)
     samples_df['tag_index'] = samples_df['tag_index'].astype(int)
-
-    # plate ids
-    if 'plate_id' in samples_df.columns:
-        samples_df['plate_id'] = samples_df.plate_id
+    
+    # plate/well ids were recorded in legacy filetypes, keep as is
+    if 'plate_id' in samples_df.columns and 'well_id' in samples_df.columns:
+        pass
     else:
-        samples_df['plate_id'] = samples_df.apply(lambda r: f'p_{r.run_id}_{(r.tag_index - 1) // 96 + 1}',
-            axis=1)
-    if 'well_id' in samples_df.columns:
-        samples_df['well_id'] = samples_df.well_id
-    else:
-        samples_df['well_id'] = (samples_df.tag_index % 96).replace(well_id_mapper())
+        # sample_id as `{plate_id}_{well_id}-{sanger_sample_id}` 
+        try:
+            plate_well_ids = samples_df['sample_id'].str.rsplit('-', n = 1).str.get(0)
+            samples_df[['plate_id', 'well_id']] = plate_well_ids.str.rsplit('_', n = 1, expand=True)
+            assert samples_df.well_id.isin(well_id_mapper().values()).all()
+        except:
+            samples_df['plate_id'] = samples_df.apply(lambda r: f'p_{r.run_id}_{(r.tag_index - 1) // 96 + 1}',
+                axis=1)
+            samples_df['well_id'] = (samples_df.tag_index % 96).replace(well_id_mapper())
+    
     assert ~samples_df.plate_id.isna().any(), 'Could not infer plate_id for all samples'
     assert ~samples_df.well_id.isna().any(), 'Could not infer well_id for all samples'
     assert samples_df.well_id.isin(well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
-    # lims plate ids
+    # id_library_lims as `{lims_plate_id}:{lims_well_id}`
     if ('id_library_lims' in samples_df.columns and
         samples_df.id_library_lims.str.contains(':').all()):
             samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(':', 
