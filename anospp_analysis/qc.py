@@ -14,8 +14,7 @@ DADA2_COLS = OrderedDict([
     ('denoised','removed by merging'), 
     ('merged','removde by rmchimera'), 
     ('nonchim','removed by post-filtering'),
-    ('final','retained') 
-
+    ('final','retained')
 ])
 
 def plot_target_balance(hap_df):

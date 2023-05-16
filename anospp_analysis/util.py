@@ -145,32 +145,42 @@ def prep_samples(samples_fn):
     load sample manifest used for anospp pipeline
     '''
 
-    logging.info(f'preparing sample manifest from {samples_fn}')
+    
 
     # allow reading from tsv (new style) or csv (old style)
     if samples_fn.endswith('csv'):
-        samples_df = pd.read_csv(samples_fn, sep=',')
+        logging.info(f'preparing sample manifest from legacy file {samples_fn}')
+        samples_df = pd.read_csv(samples_fn, sep=',', dtype='str')
+        samples_df.rename(columns=({
+            'Source_sample':'sample_id',
+            'Run':'run_id',
+            'Lane':'lane_index',
+            'Tag':'tag_index',
+            'Replicate':'replicate_id'
+            }), 
+            inplace=True)
     elif samples_fn.endswith('tsv'):
-        samples_df = pd.read_csv(samples_fn, sep='\t')
+        logging.info(f'preparing sample manifest from new file {samples_fn}')
+        samples_df = pd.read_csv(samples_fn, sep='\t', dtype='str')
+        samples_df.rename(columns=({'derived_sample_id':'sample_id'}), inplace=True)
+        assert samples_df.irods_path.str.match('/seq/\d{5}/\d{5}_\d#\d+.cram').all()
+        samples_df['run_id'] = samples_df.irods_path.str.split('/').str.get(2)
+        samples_df[['lane_index', 'tag_index']] = samples_df.irods_path \
+            .str.split('/').str.get(3) \
+            .str.split('_').str.get(1) \
+            .str.split('.').str.get(0) \
+            .str.split('#', expand=True)
     else:
-        raise ValueError(f'Expected {samples_fn} to be in either tsv or csv format')
-
-    # compatibility with old style samples column names
-    samples_df.rename(columns=({
-        'Source_sample':'sample_id',
-        # 'sample':'sample_id',
-        'Run':'run_id',
-        'Lane':'lane_index',
-        'Tag':'tag_index',
-        'Replicate':'replicate_id'
-        }), 
-    inplace=True)
+        raise ValueError(f'Expected {samples_fn} to be in either tsv or csv format')    
 
     for col in ('sample_id',
                 'run_id',
                 'lane_index',
                 'tag_index'):
         assert col in samples_df.columns, f'samples column {col} not found'
+    samples_df['run_id'] = samples_df['run_id'].astype(int)
+    samples_df['lane_index'] = samples_df['lane_index'].astype(int)
+    samples_df['tag_index'] = samples_df['tag_index'].astype(int)
 
     # plate ids
     if 'plate_id' in samples_df.columns:
