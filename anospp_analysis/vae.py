@@ -7,8 +7,8 @@ import argparse
 import keras
 from scipy.spatial import ConvexHull, Delaunay
 
-from util import *
-from nn import parse_seqids_series, construct_unique_kmer_table
+from .util import *
+from .nn import parse_seqids_series, construct_unique_kmer_table
 
 #Variables
 K = 8
@@ -213,109 +213,177 @@ def generate_convex_hulls(convex_hulls_df):
 
     return hull_dict
 
-def project_point_to_plane(p, a,b,c):
+def check_half_space(p, n, o):
     '''
-    project point p down to the plane specified by vertices a,b,c
-    in 3d space
+    check in which half space separated by the plane
+    defined by its normal n p lies
+    centered on origin o
     '''
-    cross_bc = np.cross(b-a, c-a)
-    #get z, the unit vector perpendicular to the plane
-    z = cross_bc/np.sqrt(np.dot(cross_bc, cross_bc))
-    #compute h, the distance from p to the plane
-    h = np.dot(p, z)
-    #get q, the projection of p onto the plane
-    q = p - h * z
-
-    return q, h
-
-def determine_halfplanes(q, a,b,c):
-    '''
-    determine in which halfplane point q is
-    w.r.t. the edges defined by the vertices a,b,c
-    for each edge, True indicates that the point is in the same 
-    halfplane as the triangle defined by a,b,c
-    '''
-    #check whether the crossproduct of q and edge ab
-    #is in the same direction as the crossproduct of edge ac and ab
-    ab = np.dot(np.cross(q-a, b-a), np.cross(c-a, b-a)) >= 0
-    #same for other edges
-    bc = np.dot(np.cross(q-b,c-b), np.cross(a-b,c-b)) >= 0
-    ca = np.dot(np.cross(q-c,a-c), np.cross(b-c,a-c)) >= 0
+    hp = np.dot(p - o, n)
     
-    #return array of booleans in this order
-    #such that we select the appropriate vertices or edges in distance computation
-    return np.array([bc, ca, ab])
+    return hp >= 0
 
-def compute_dist_to_vertex(p, v):
+def find_normal_edge_simplex(a, b, c):
     '''
-    compute euclidean distance from point p to v
+    find the normal vector of the plane C
+    spanned by the edge ab of the simplex abc
+    and the normal vector to the simplex
+    centered on a
+    oriented s.t. positive points into the simplex
     '''
-    return np.sqrt(np.dot(p-v, p-v))
-
-def compute_dist_to_edge(p, v, w):
-    '''
-    compute euclidean distance from point to line specified by edge
-    '''
-    # u is unit vector in the direction of the line vw
-    u = (w-v)/np.sqrt(np.dot(w-v, w-v))
-    #projection of p onto u
-    q = np.dot(p-v,u)*u
-    #distance is length of difference p and q
-    d = np.sqrt(np.dot(p-v-q, p-v-q))
+    #the normal vector of the plane of the simplex
+    #centered on a
+    z = np.cross(b - a, c - a)
+    #normalised
+    u = z/np.sqrt(np.dot(z, z))
+    #the edge ab normalised and centered on a
+    e = (b - a)/np.sqrt(np.dot(b - a, b - a))
+    #the unit normal of plane C
+    n = np.cross(u, e)
     
-    return d
+    return n, a
 
-def choose_edge_or_vertex(p, q, vertices):
+def check_edge_projection(p, v, w):
     '''
-    if the halfplane test indicates that q is above two and
-    below one edge, we have to determine whether it's closest to 
-    the edge it's below, or to one of the vertices defining the edge
-    it's closest to the edge, if the projection of q onto the line
-    defined by the edge, falls on the edge itself (and not on its extension)
+    check whether p lies above the edge vw
     '''
-    v, w = vertices[0], vertices[1]
-    #length of edge
-    le = np.sqrt(np.dot(w-v,w-v))
-    #unit vector in direction of the edge vw
-    u = (w-v)/le
-    #length of projection of q
-    lq = np.dot(q-v,u)
+    #let vw be the normal vector defining plane U
+    #through v
+    e = w - v
+    #length of vw
+    le = np.sqrt(np.dot(e,e))
+    #unit vector along the edge, centered on v
+    n = e/le
+    #project p along the edge vw
+    q = np.dot(p - v, n)
     
-    if lq < 0:
-        # vertex v is closests
-        d = compute_dist_to_vertex(p, v)       
-    elif lq > le:
+    return q, le
+
+def check_edge_partition(p, vertices):
+    '''
+    given that p lies in the part bordering edge vw
+    determine whether it is closest to the edge 
+    or one of the vertices
+    '''
+    v, w = vertices
+    #get lenght of projection q of p along the edge
+    #and the lenght l of the edge
+    q, l = check_edge_projection(p, v, w)
+    
+    if q<0:
+        #vertex v is closest
+        return compute_distance_to_vertex(p, v)
+    elif q>l:
         #vertex w is closest
-        d = compute_dist_to_vertex(p, w)  
+        return compute_distance_to_vertex(p, w)
     else:
         #edge vw is closest
-        d = compute_dist_to_edge(p, v, w)
+        return compute_distance_to_edge(p, v, w)
+
+def check_vertex_partition(p, v, verts):
+    '''
+    given that p lies in the part bordering vertex v
+    determine whether it is closest to the vertex 
+    or one of the edges vw or vu
+    '''
+    w1, w2 = verts
+    #get lenght of projection q1 of p along the edge vw1
+    #and the lenght l1 of the edge vw1
+    q1, l1 = check_edge_projection(p, v, w1)
+    if q1 > 0:
+        #corner of more than 90 degrees
+        if q1 > l1:
+            #vertex w1 is closest
+            return compute_distance_to_vertex(p, w1)
+        else:
+            #edge vw1 is closest
+            return compute_distance_to_edge(p, v, w1)
+    q2, l2 = check_edge_projection(p, v, w2)
+    if q2 > 0:
+        #corner of more than 90 degrees
+        if q2 > l2:
+            #vertex w2 is closest
+            return compute_distance_to_vertex(p, w2)
+        else:
+            #edge vw2 is closest
+            return compute_distance_to_edge(p, v, w2)
+    else:
+        #vertex v is closest
+        return compute_distance_to_vertex(p, v)
+   
+def compute_distance_to_plane(p, vertices):
+    '''
+    compute distance point p to the plane defined 
+    by the vertices of the simplex
+    '''
+    a, b, c = vertices
+    #find a vector perpendicular to the simplex
+    #centered on a
+    z = np.cross(b-a, c-a)
+    #unit vector perpendicular to the plane
+    u = z/np.sqrt(np.dot(z, z))
+    #distance of p to the plane
+    h = np.abs(np.dot(p - a, u))
+    
+    return h
+
+def compute_distance_to_vertex(p, v):
+    '''
+    compute distance of point p to vertex v
+    '''
+    d = np.sqrt(np.dot(p - v, p - v))
+    
     return d
 
-def compute_distance_to_surface(p, vertices):
+def compute_distance_to_edge(p, v, w):
     '''
-    compute distance of point p to the simplex spanned by vertices
-    in 3d
+    compute the distance of p to the edge vw
     '''
-    a,b,c = vertices[0], vertices[1], vertices[2]
-    #project the point to the plane of the simplex
-    q, h = project_point_to_plane(p, a, b, c)
-    #perform halfplanes test
-    half_planes = determine_halfplanes(q, a, b, c)
-    #if inside the triangle, dist is h
-    if half_planes.sum()==3:
-        return np.abs(h)
-    #if closest to vertex
-    elif half_planes.sum()==1:
-        d = compute_dist_to_vertex(p, vertices[half_planes][0])
-        return d
-    #if below one half plane
-    #determine whether it's closest to edge or vertex
-    elif half_planes.sum()==2:
-        d = choose_edge_or_vertex(p, q, vertices[half_planes])
-        return d
+    #let vw be the normal vector defining plane U
+    #through v
+    e = w - v
+    #let n be unit vector along the edge
+    n = e/np.sqrt(np.dot(e,e))
+    #let q be the projection of p along the edge vw
+    q = np.dot(p - v, n)*n
+    #distance is the length of the difference between p and q
+    d = np.sqrt(np.dot(p - v - q, p - v - q))
+    
+    return d
+
+def compute_distance_to_simplex(p, vertices):
+    '''
+    Compute the 3d distance of point p to the triangle
+    defined by the vertices
+    '''
+    a, b, c = vertices
+    
+    #get normal vectors to the planes containing the 
+    #edges of the triangles and perpendicular to the simplex
+    Cn, Co = find_normal_edge_simplex(a,b,c)
+    Bn, Bo = find_normal_edge_simplex(c,a,b)
+    An, Ao = find_normal_edge_simplex(b,c,a)
+    
+    #for each of the edge planes, check whether p lies
+    #in the same halfplane of the simplex
+    Cs = check_half_space(p, Cn, Co)
+    Bs = check_half_space(p, Bn, Bo)
+    As = check_half_space(p, An, Ao)
+    
+    partition = np.array([As, Bs, Cs])
+    
+    if np.sum(partition) == 3:
+        #p lies within the contours of the simplex
+        return compute_distance_to_plane(p, vertices)
+    elif np.sum(partition) == 2:
+        #p lies in a part bordering an edge
+        return check_edge_partition(p, vertices[partition])
+    elif np.sum(partition) == 1:
+        #p lies in a part bordering a vertex
+        return check_vertex_partition(p, vertices[partition][0], vertices[~partition])
     else:
-        logging.error('half plane test indicates invalid projection')
+        logging.error("Something thought to be impossible happened in the convex hull computation - \
+        tell Marilou to retake her linear algebra exam")
 
 def compute_distance_to_hull(hull, positions):
     '''
@@ -327,22 +395,11 @@ def compute_distance_to_hull(hull, positions):
     dists = np.zeros((positions.shape[0], hull.simplices.shape[0]))
     for i, s in enumerate(hull.simplices):
         #compute distance to each simplex in turn
-        dists[:,i] = np.array([compute_distance_to_surface(p, hull.points[s]) for p in positions])
+        dists[:,i] = np.array([compute_distance_to_simplex(p, hull.points[s]) for p in positions])
     #get the distance to the closest simplex for each point
-    print(dists)
     distances = dists.min(axis=1)
 
     return distances
-
-def compute_hull_dist(hull, positions):
-    '''
-    Compute the distance to the specified hull for a set of positions
-    '''
-    manifold = hmesh.Manifold().from_triangles(hull.points, hull.simplices)   
-    mesh_dist = hmesh.MeshDistance(manifold)
-    dist = mesh_dist.signed_distance(positions.flatten())
-
-    return np.absolute(dist)
 
 def check_is_in_hull(hull_pos, positions):
     '''
@@ -365,7 +422,7 @@ def generate_hull_dist_df(hull_dict, latent_positions_df, unassigned):
     dist_df = pd.DataFrame(index=unassigned)
     positions = latent_positions_df.loc[unassigned,['mean1','mean2','mean3']].values
     for species in hull_dict.keys():
-        dist_df[species] = compute_hull_dist(hull_dict[species][1], positions)
+        dist_df[species] = compute_distance_to_hull(hull_dict[species][1], positions)
     return dist_df 
 
 def get_closest_hulls(hull_dict, latent_positions_df, unassigned):
