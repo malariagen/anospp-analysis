@@ -71,88 +71,109 @@ def test_predict_latent_pos():
     assert (np.abs(result.mean2.values - comparison.mean2.values) < 0.001).all()
     assert (np.abs(result.mean3.values - comparison.mean3.values) < 0.001).all()
 
-def test_project_point_to_plane():
-    
-    p = np.array([3,1,2])
+def test_find_normal_edge_simplex():
     a,b,c = np.array([1,0,0]), np.array([4,0,0]), np.array([3,4,0])
-    
-    result = vae.project_point_to_plane(
-        p, 
-        a, b, c)
-    
-    assert (result[0] == np.array([3,1,0])).all()
-    assert result[1] == 2
 
-def test_determine_halfplanes():
+    result = vae.find_normal_edge_simplex(
+        a,
+        b,
+        c
+    )
 
-    a,b,c = np.array([1,0,0]), np.array([4,0,0]), np.array([3,4,0])
-    points = np.array([[2,-1,0], [5,-1,0], [4,2,0], [3,5,0], [2,3,0], [0,-1,0], [3,1,0]])
+    assert (result[0] == np.array([0,1,0])).all()
+    assert (result[1] == np.array([1,0,0])).all()
+
+def test_check_half_space():
+
+    n, o = np.array([0,1,0]), np.array([1,0,0])
+    points = np.array([[2,-1,11], [4,2,2], [-33,5,-1], [2,0,0]])
 
     result = np.array([
-        vae.determine_halfplanes(p,a,b,c) for p in points
+        vae.check_half_space(p,n,o) for p in points
     ])
 
     expected_result = np.array([
-        [True, True, False],
-        [False, True, False],
-        [False, True, True], 
-        [False, False, True], 
-        [True, False, True], 
-        [True, False, False],
-        [True, True, True]
+        [False, True, True, True]
     ])
 
     assert (result == expected_result).all()
-    
-def test_compute_dist_to_vertex():
+  
+def test_compute_distance_to_vertex():
 
     p = np.array([3,1,2])
     v = np.array([4,0,0])
 
-    result = vae.compute_dist_to_vertex(
+    result = vae.compute_distance_to_vertex(
         p, 
         v
     )
 
     assert result == np.sqrt(6)
 
-def test_compute_dist_to_edge():
+def test_compute_distance_to_edge():
     v, w = np.array([1,0,0]), np.array([4,0,0])
-    points = np.array([[1,2,0], [3,-3,0], [0,-1,0], [6,1,-1]])
+    points = np.array([[1,2,0], [3,-3,-3], [0,-1,0], [6,1,-1]])
 
     result = np.array([
-        vae.compute_dist_to_edge(p, v, w) for p in points
+        vae.compute_distance_to_edge(p, v, w) for p in points
     ])
 
-    expected_result = np.array([2, 3, 1, np.sqrt(2)])
+    expected_result = np.array([2, np.sqrt(18), 1, np.sqrt(2)])
 
     assert (result == expected_result).all()
 
-def test_choose_edge_or_vertex():
+def test_compute_distance_to_plane():
+    vertices = np.array([[1,0,0], 
+                         [4,0,0], 
+                         [3,4,0]])
+    points = np.array([[3,1,2], [3,-3,0], [10,1,-1]])
+
+    result = np.array([
+        vae.compute_distance_to_plane(p, vertices) for p in points
+    ])
+
+    expected_result = np.array([2, 0, 1])
+
+    assert (result == expected_result).all()
+
+def test_check_edge_partition():
 
     vertices = np.array([[1,0,0], 
                          [4,0,0]])
-    points = np.array([[1,2,0], [3,-3,0], [0,-1,0], [6,1,-1]])
-    projected_points = np.array([[1,2,0], [3,-3,0], [0,-1,0], [6,1,0]])
+    points = np.array([[1,4,3], [3,-3,0], [0,-1,-1], [6,1,-1], [3,0,0]])
 
     result = np.array([
-        vae.choose_edge_or_vertex(p,
-                                  q,
-                                  vertices) for p, q in zip(points, projected_points)
+        vae.check_edge_partition(p,
+                                vertices) for p in points
     ])
 
-    expected_result = np.array([2, 3, np.sqrt(2), np.sqrt(6)])
+    expected_result = np.array([5, 3, np.sqrt(3), np.sqrt(6), 0])
 
     assert (result == expected_result).all()
 
-def test_compute_distance_to_surface():
+def test_vertex_partition():
+    v = np.array([0,1,0])
+    vert = np.array([[-10,0,0], [10, 0, 0]])
+    points = np.array([[0,2,0], [-1,20,2], [-1,2,0], [-21,3,-1]])
+
+    result = np.array([
+        vae.check_vertex_partition(p,
+                                 v,
+                                 vert) for p in points
+    ])
+
+    expected_result = np.array([1, np.sqrt(366), 11/np.sqrt(101), np.sqrt(131)])
+
+    assert (result == expected_result).all()
+
+def test_compute_distance_to_simplex():
     vertices = np.array([[1,0,0], 
                          [4,0,0], 
                          [3,4,0]])
     points = np.array([[3,1,2], [0,-1,2], [3,-3,0], [10,1,-1], [3,1,0], [1,0,0]])
 
     result = np.array([
-        vae.compute_distance_to_surface(p, vertices) for p in points
+        vae.compute_distance_to_simplex(p, vertices) for p in points
     ])
 
     expected_result = np.array([2, np.sqrt(6), 3, np.sqrt(38), 0, 0])
@@ -176,10 +197,7 @@ def test_compute_distance_to_hull():
                         30.661522,31.2423,47.31292,49.995487,49.006126,44.459553,\
                         52.336056,23.796885,59.219532,69.760345,26.823551,4.229266,\
                         77.5418,53.13494,5.8358717,8.693414,2.8645864])
-    print(np.abs(result-expected_result))
-
-test_compute_distance_to_hull()
-    #assert (np.abs(result-expected_result) < 0.0001).all()
+    assert (np.abs(result-expected_result) < 0.0001).all()
 
 def test_check_is_in_hull():
     hull_df = pd.read_csv("ref_databases/gcrefv1/convex_hulls.tsv", sep='\t')
@@ -197,7 +215,7 @@ def test_check_is_in_hull():
         positions)
 
     assert (result == np.array([False, False, True, True, False, False])).all()
-'''
+
 def test_perform_convex_hull_assignments():
     latent_pos_df = pd.read_csv("test_data/comparisons/latent_coordinates.tsv", sep='\t', \
                              index_col=0)
@@ -215,4 +233,3 @@ def test_perform_convex_hull_assignments():
                 'Anopheles_coluzzii', 'Anopheles_coluzzii', 'Anopheles_coluzzii', 'Uncertain_tengrela_coluzzii_gambiae',\
                 'Anopheles_coluzzii', 'Uncertain_coluzzii_tengrela', 'Anopheles_coluzzii', \
                 'Anopheles_coluzzii', 'Anopheles_coluzzii', 'Anopheles_coluzzii'])).all()
-'''
