@@ -20,6 +20,9 @@ Key analysis steps are implemented as standalone scripts:
 
 - `anospp-prep` takes DADA2 output files and targets primer sequences, demultiplexes the amplicons and yields haplotypes table
 - `anospp-qc` takes haplotypes table, DADA2 stats table and samples manifest and produces QC plots
+- `anospp-plasm` blasts Plasmodium sequences against reference dataset to determine species and infer sample infection status
+- `anospp-nn` compares k-mer profiles of mosquito targets against a reference dataset and provides probabilistic species calls
+- `anospp-vae` provides finer scale species prediction for An. gambiae complex with VAE projection
 
 ## Development
 
