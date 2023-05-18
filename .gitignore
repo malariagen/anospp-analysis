@@ -1,5 +1,6 @@
 .DS_Store
 test_data/
+ref_databases/
 *.code-workspace
 
 # Byte-compiled / optimized / DLL files
