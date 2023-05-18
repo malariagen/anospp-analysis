@@ -6,7 +6,6 @@ import sys
 import seaborn as sns
 import matplotlib
 matplotlib.use('Agg')
-from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 from Bio import AlignIO
 from Bio import Phylo
@@ -33,7 +32,7 @@ def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title
         None
     """
 
-    logging.info(f"Plotting a heatmap for each lims plate for {target}.")
+    logging.info(f"plotting a heatmap for each lims plate for {target}")
 
     # Extract the column name that corresponds to the given target.
     col = f'total_reads_{target}'
@@ -48,8 +47,11 @@ def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title
     sns.heatmap(pivot_df, annot=annot, cmap=cmap, ax=ax, center=center, fmt='.5g')
     
     # Set the title of the plot.
-    ax.set_title(f"Total {target} reads for {plate}")
-    
+    if not title:
+        ax.set_title(f"Total {target} reads for {plate}")
+    else:
+        ax.set_title(title)
+
     # Add grid lines to the plot.
     ax.hlines([i * 2 for i in range(9)], 0, 24, colors='k')
     ax.vlines([j * 2 for j in range(13)], 0, 16, colors='k')
@@ -76,7 +78,7 @@ def plot_bar(df, reference, fname):
     - None
     """
 
-    logging.info(f"Generating bar plots for the three plasmodium statuses")
+    logging.info(f"generating bar plots for the three plasmodium statuses")
 
     # Drop rows with missing values in 'plasmodium_species' or 'plasmodium_status'
     data = df.dropna(subset=['plasmodium_species', 'plasmodium_status'])
@@ -117,7 +119,7 @@ def plot_bar(df, reference, fname):
     plt.savefig(fname, dpi=300, bbox_inches='tight')
 
 
-def hard_filter_haplotypes(hap_df, comb_stats_df, filter_p1, filter_p2):
+def hard_filter_haplotypes(hap_df, filter_p1, filter_p2):
 
     """
     Processes haplotype data and filters it according to read counts.
@@ -132,7 +134,7 @@ def hard_filter_haplotypes(hap_df, comb_stats_df, filter_p1, filter_p2):
         pd.DataFrame: Filtered dataframe containing haplotype data with read counts meeting the specified thresholds.
     """
 
-    logging.info('process the haplotype values')
+    logging.info(f'filtering the haplotype data, cutoffs: P1 - {filter_p1}, P2 - {filter_p2}')
     
     # pull out the haplotypes that meet the filter_value
     p1_filter = (hap_df["target"] == "P1") & (hap_df["reads"] >= int(filter_p1))
@@ -157,7 +159,7 @@ def create_hap_data(hap_df):
         pandas.DataFrame: A dataframe with haplotype and reads/sample stats.
     """
 
-    logging.info(f"Creating a dataframe with haplotype and reads/sample stats.")
+    logging.info(f"creating a dataframe with haplotype and reads/sample stats.")
 
     # Create pivot table data for dada2 haplotypes using the hap_df data
     hap_data = hap_df[['sample_id', 'consensus', 'reads']].copy()
@@ -204,7 +206,7 @@ def haplotype_summary(hap_df, target, workdir):
         The list of new column names for the summary DataFrame.
     """
 
-    logging.info(f"Processing the haplotype data for {target} and generating a table summary.")
+    logging.info(f"processing the haplotype data for {target} and generating a table summary.")
 
     # Filter the input data to the current target and prepare the DataFrame.
     hap_df_filt = hap_df[hap_df["target"] == target]
@@ -327,6 +329,8 @@ def run_blast(hap_data, target, workdir, blastdb):
 def filter_blast(blast_df, target, filter_F1=10, filter_F2=10, filter_falciparum=False):
 
     # Filter out oversensitive haplotypes of Plasmodium falciparum for both P1 and P2
+    logging.info('filtering blast output for falciparum')
+
     if filter_falciparum:
         if target == 'P1':
             df_f = blast_df[blast_df['combUID'].isin(['F1-0']) & (blast_df['reads']>= int(filter_F1))]
@@ -460,7 +464,7 @@ def create_per_read_summary(blast_filt_df, target, outdir):
         pd.DataFrame: The summary dataframe.
     """
 
-    logging.info(f'Generating a per-read summary for {target}')
+    logging.info(f'generating a per-read summary for {target}')
 
     # Create a dataframe with the relevant stats
     df_sum = blast_filt_df.groupby(['sample_id', 'total_reads']).agg(
@@ -494,7 +498,7 @@ def merge_and_export(samples_df, merged_df, workdir):
     Returns:
         A DataFrame containing the merged and exported results with additional columns for sample run and sample ID.
     """
-    logging.info(f'Merging the summary outputs with the sample metadata and exporting the merged dataframe to the work directory')
+    logging.info(f'merging the summary outputs with the sample metadata and exporting the merged dataframe to the work directory')
 
     # Merge the two dataframes and select only relevant columns
     df_merged = pd.merge(samples_df.set_index('sample_id'), merged_df, left_index=True, right_index=True, how='right')
@@ -538,7 +542,7 @@ def process_results(haps_merged_df, filter_p1, filter_p2, workdir, outdir):
         pd.DataFrame: A pandas DataFrame containing various metrics for the samples.
     """
 
-    logging.info(f'Reading and processng the combined results summary TSV file and computing several stats')
+    logging.info(f'reading and processng the combined results summary TSV file and computing stats')
 
     def uniques(xs):
         return list(sorted(set(xi for x in xs for xi in x)))
@@ -665,7 +669,7 @@ def generate_plots(meta_df_all, haps_merged_df, workdir, reference, interactive_
     None
     """
 
-    logging.info(f'Generating plate and bar plots')
+    logging.info(f'generating plate and bar plots')
 
     # Create columns for sorting the dataframe
     meta_df_all['lims_row'] = meta_df_all.lims_well_id.str.slice(0,1)
@@ -712,25 +716,25 @@ def plasm(args):
     os.makedirs(args.workdir, exist_ok=True)
 
     # Prepare haplotype and sample dataframes
-    logging.info('ANOSPP QC data import started')
+    logging.info('ANOSPP plasm data import started')
     hap_df = prep_hap(args.haplotypes)
     samples_df = prep_samples(args.manifest)
 
     # Combine haplotype and sample dataframes with stats
-    logging.info('## prepare input data and variables')
+    logging.info('preparing input data and variables')
     stats_df = prep_stats(args.stats)
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-    haps_merged_df = hard_filter_haplotypes(hap_df, comb_stats_df, args.filter_p1, args.filter_p2)
+    haps_merged_df = hard_filter_haplotypes(hap_df, args.filter_p1, args.filter_p2)
 
     # Check for presence of PLASM_TARGETS
-    logging.info('Checking for the presence of PLASM_TARGETS')
+    logging.info('checking for the presence of PLASM_TARGETS')
     if len(haps_merged_df['target'].unique()) < 1:
         logging.warning('Could not find both PLASM_TARGETS in hap_df')
         sys.exit(1)
 
     else:
         # Run BLAST and create haplotype tree for each target
-        logging.info('## run blast')
+        logging.info('running blast')
         df_list = []
         hap_output = []
         for target in haps_merged_df['target'].unique():          
@@ -743,7 +747,7 @@ def plasm(args):
             hap_output.append(blast_filt_df)
 
         # Combine blast results and create merged dataframe for all targets
-        logging.info('## create a dataframe used the merged summary outputs')
+        logging.info('merging blast summary outputs')
         merged_df = pd.concat(df_list, axis=1)
         merge_and_export(samples_df, merged_df, args.workdir)
         df_all = process_results(haps_merged_df, args.filter_p1, args.filter_p2, args.workdir, args.outdir)
@@ -752,10 +756,10 @@ def plasm(args):
 
         # Merge sample and stats dataframes and generate plots
         logging.info('merging the samples(meta) dataframe with the stats dataframe and creating plots')
-        meta_df_all = pd.merge(samples_df.set_index('sample_id'), df_all, left_index =True, right_index=True, how='left')
+        meta_df_all = pd.merge(samples_df.set_index('sample_id'), df_all, left_index=True, right_index=True, how='left')
         generate_plots(meta_df_all, haps_merged_df, args.workdir, args.reference, args.interactive_plotting)
 
-        logging.info('## completed the plasm program!!!')
+        logging.info('ANOSPP plasm complete')
 
 
 def main():

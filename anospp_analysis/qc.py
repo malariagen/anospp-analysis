@@ -14,8 +14,7 @@ DADA2_COLS = OrderedDict([
     ('denoised','removed by merging'), 
     ('merged','removde by rmchimera'), 
     ('nonchim','removed by post-filtering'),
-    ('final','retained') 
-
+    ('final','retained')
 ])
 
 def plot_target_balance(hap_df):
@@ -181,7 +180,7 @@ def plot_sample_success(comb_stats_df):
     fig, axs = plt.subplots(1,2,figsize=(12,6))
     for col, ax in zip(('final_log10','filter_rate'), axs):
         sns.scatterplot(data=comb_stats_df,
-                x='mosq_targets_recovered',
+                x='raw_mosq_targets_recovered',
                 y=col,
                 hue='plate_id',
                 alpha=.5, 
@@ -232,8 +231,8 @@ def qc(args):
     
     logging.info('ANOSPP QC data import started')
 
-    hap_df = prep_hap(args.haplotypes)
     samples_df = prep_samples(args.manifest)
+    hap_df = prep_hap(args.haplotypes)
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
@@ -274,12 +273,12 @@ def qc(args):
     for col in ('input_log10', 
                 'final_log10',
                 'filter_rate',
-                'mosq_targets_recovered',
+                'raw_mosq_targets_recovered',
                 'P1_log10_reads',
                 'P2_log10_reads',
-                'multiallelic_targets'):
+                'raw_multiallelic_mosq_targets'):
         for lims_plate in (True, False):
-            if col == 'mosq_targets_recovered':
+            if col == 'raw_mosq_targets_recovered':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = 62
             elif col == 'filter_rate':
@@ -300,7 +299,7 @@ def qc(args):
             fig.savefig(plate_hm_fn)
             plt.close(fig)
 
-    logging.info('ANOSPP data QC ended')
+    logging.info('ANOSPP QC complete')
 
 def main():
     

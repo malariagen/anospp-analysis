@@ -145,47 +145,59 @@ def prep_samples(samples_fn):
     load sample manifest used for anospp pipeline
     '''
 
-    logging.info(f'preparing sample manifest from {samples_fn}')
-
     # allow reading from tsv (new style) or csv (old style)
     if samples_fn.endswith('csv'):
-        samples_df = pd.read_csv(samples_fn, sep=',')
+        logging.info(f'preparing sample manifest from legacy file {samples_fn}')
+        samples_df = pd.read_csv(samples_fn, sep=',', dtype='str')
+        samples_df.rename(columns=({
+            'Source_sample':'sample_id',
+            'Run':'run_id',
+            'Lane':'lane_index',
+            'Tag':'tag_index',
+            'Replicate':'replicate_id'
+            }), 
+            inplace=True)
     elif samples_fn.endswith('tsv'):
-        samples_df = pd.read_csv(samples_fn, sep='\t')
+        logging.info(f'preparing sample manifest from new file {samples_fn}')
+        samples_df = pd.read_csv(samples_fn, sep='\t', dtype='str')
+        samples_df.rename(columns=({'derived_sample_id':'sample_id'}), inplace=True)
+        assert samples_df.irods_path.str.match('/seq/\d{5}/\d{5}_\d#\d+.cram').all()
+        samples_df['run_id'] = samples_df.irods_path.str.split('/').str.get(2)
+        samples_df[['lane_index', 'tag_index']] = samples_df.irods_path \
+            .str.split('/').str.get(3) \
+            .str.split('_').str.get(1) \
+            .str.split('.').str.get(0) \
+            .str.split('#', expand=True)
     else:
-        raise ValueError(f'Expected {samples_fn} to be in either tsv or csv format')
-
-    # compatibility with old style samples column names
-    samples_df.rename(columns=({
-        'Source_sample':'sample_id',
-        # 'sample':'sample_id',
-        'Run':'run_id',
-        'Lane':'lane_index',
-        'Tag':'tag_index',
-        'Replicate':'replicate_id'
-        }), 
-    inplace=True)
+        raise ValueError(f'Expected {samples_fn} to be in either tsv or csv format')    
 
     for col in ('sample_id',
                 'run_id',
                 'lane_index',
                 'tag_index'):
         assert col in samples_df.columns, f'samples column {col} not found'
-
-    # plate ids
-    if 'plate_id' in samples_df.columns:
-        samples_df['plate_id'] = samples_df.plate_id
+    samples_df['run_id'] = samples_df['run_id'].astype(int)
+    samples_df['lane_index'] = samples_df['lane_index'].astype(int)
+    samples_df['tag_index'] = samples_df['tag_index'].astype(int)
+    
+    # plate/well ids were recorded in legacy filetypes, keep as is
+    if 'plate_id' in samples_df.columns and 'well_id' in samples_df.columns:
+        pass
     else:
-        samples_df['plate_id'] = samples_df.apply(lambda r: f'p_{r.run_id}_{(r.tag_index - 1) // 96 + 1}',
-            axis=1)
-    if 'well_id' in samples_df.columns:
-        samples_df['well_id'] = samples_df.well_id
-    else:
-        samples_df['well_id'] = (samples_df.tag_index % 96).replace(well_id_mapper())
+        # sample_id as `{plate_id}_{well_id}-{sanger_sample_id}` 
+        try:
+            plate_well_ids = samples_df['sample_id'].str.rsplit('-', n = 1).str.get(0)
+            samples_df[['plate_id', 'well_id']] = plate_well_ids.str.rsplit('_', n = 1, expand=True)
+            assert samples_df.well_id.isin(well_id_mapper().values()).all()
+        except:
+            samples_df['plate_id'] = samples_df.apply(lambda r: f'p_{r.run_id}_{(r.tag_index - 1) // 96 + 1}',
+                axis=1)
+            samples_df['well_id'] = (samples_df.tag_index % 96).replace(well_id_mapper())
+    
     assert ~samples_df.plate_id.isna().any(), 'Could not infer plate_id for all samples'
     assert ~samples_df.well_id.isna().any(), 'Could not infer well_id for all samples'
     assert samples_df.well_id.isin(well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
-    # lims plate ids
+    # id_library_lims as `{lims_plate_id}:{lims_well_id}`
     if ('id_library_lims' in samples_df.columns and
         samples_df.id_library_lims.str.contains(':').all()):
             samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(':', 
@@ -211,9 +223,13 @@ def prep_stats(stats_fn):
     logging.info(f'preparing DADA2 statistics from {stats_fn}')
 
     stats_df = pd.read_csv(stats_fn, sep='\t')
-    # compatibility with legacy samples column names
+
     stats_df.rename(columns={
-        's_Sample':'sample_id'
+        # compatibility with legacy format
+        's_Sample':'sample_id',
+        # compatibility with new format 
+        'sample':'sample_id',
+        'DADA2_input':'input'
         },
         inplace=True)
     
@@ -231,6 +247,7 @@ def prep_stats(stats_fn):
     stats_df['denoised'] = stats_df[['denoisedF','denoisedR']].min(axis=1)
     # legacy stats calculated separately for each target, merging
     if 'target' in stats_df.columns:
+        logging.info(f'summarising legacy DADA2 statistics across targets')
         stats_df = stats_df.groupby('sample_id').sum(numeric_only=True).reset_index()
     # add final read counts for comatibility with legacy pipeline
     # that had a post-filtering step
