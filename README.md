@@ -100,24 +100,3 @@ in which case one should update poetry lock file
 ```bash
 poetry lock
 ```
-
-## Release checklist
-
-While in dev branch
-
-- test functionality (TODO CI)
-- bump version in module init
-- bump version in `pyproject.toml`
-
-Then,
-
-- merge into master
-- github release
-- pypi release
-
-Conda recipe update `conda.recipe/meta.yaml`:
-
-- check deps vs `environment.yaml` and `pyproject.toml`
-- bump version in meta yaml  
-- update sha256 from pypi project (download files > tar.gz > view hashes)
-- test conda recipe with `bioconda-utils build --git-range master` vs bioconda-recipes
