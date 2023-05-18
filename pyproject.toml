@@ -16,8 +16,6 @@ BioPython = "*"
 cutadapt = "*"
 keras = "^2.12.0"
 tensorflow = "^2.12.0"
-toytree = "*"
-toyplot = "*"
 bokeh = "*"
 
 [tool.poetry.group.dev.dependencies]
