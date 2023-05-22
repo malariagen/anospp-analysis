@@ -13,19 +13,19 @@ source:
 build:
   noarch: python
   number: 0
-  script: {{ PYTHON }} -m pip install . -vv
+  script: {{ PYTHON }} -m pip install . --no-deps -vv
 
 requirements:
   host:
     - pip
     - poetry
-    - python
+    - python >=3
   run:
+    - python >=3
     - biopython
     - cutadapt
     - numpy 
     - pandas
-    - python
     - seaborn
     - blast
     - fasttree
