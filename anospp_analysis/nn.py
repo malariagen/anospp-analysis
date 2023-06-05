@@ -182,17 +182,14 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     error_seqs = []
     for _, cand in error_candidates.iterrows():
         possible_sources = mosq_hap_df.query('(sample_id == @cand.sample_id) & (target == @cand.target) & \
-                                             (not seqid in @error_seqs) & (seqid != @cand.seqid)')
-        #it can happen that there are no possible sources, if
-        # a sample has two unique haplotypes at one target
-        if possible_sources.shape[0] > 0:
-            cand_parsed_seqid = parse_seqid(cand.seqid)
-            possible_sources_parsed_seqids = parse_seqids_series(possible_sources.seqid)
-            for possible_source in possible_sources_parsed_seqids['uidx']:
-                abs_kmer_dist = np.abs(kmers[cand.target,cand_parsed_seqid[1],:] - kmers[cand.target,possible_source,:]).sum()
-                if abs_kmer_dist<threshold:
-                    error_seqs.append(cand.seqid)
-                    break
+                                             & (seqid != @cand.seqid)')
+        cand_parsed_seqid = parse_seqid(cand.seqid)
+        possible_sources_parsed_seqids = parse_seqids_series(possible_sources.seqid)
+        for possible_source in possible_sources_parsed_seqids['uidx']:
+            abs_kmer_dist = np.abs(kmers[cand.target,cand_parsed_seqid[1],:] - kmers[cand.target,possible_source,:]).sum()
+            if abs_kmer_dist<threshold:
+                error_seqs.append(cand.seqid)
+                break
     
     logging.info(f'identified {len(error_seqs)} error sequences')
 
