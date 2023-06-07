@@ -574,49 +574,6 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict):
 
     return fig, ax
 
-def finalise_assignments(comb_stats_df, ch_assignments_df):
-
-    logging.info('finalising mosquito species assignments')
-
-    #Add VAE columns
-    m1dict = dict(ch_assignments_df.mean1)
-    m2dict = dict(ch_assignments_df.mean2)
-    m3dict = dict(ch_assignments_df.mean3)
-    vaespeciesdict = dict(ch_assignments_df.VAE_species)
-
-    comb_stats_df['LS1'] = comb_stats_df.sample_id.map(m1dict)
-    comb_stats_df['LS2'] = comb_stats_df.sample_id.map(m2dict)
-    comb_stats_df['LS3'] = comb_stats_df.sample_id.map(m3dict)
-    comb_stats_df['VAE_species'] = comb_stats_df.sample_id.map(vaespeciesdict)
-
-    #Get final species call
-    #Samples assigned by VAE
-    comb_stats_df['species_call'] = comb_stats_df.VAE_species
-    comb_stats_df.loc[~comb_stats_df.species_call.isnull(), 'call_method'] = 'VAE'
-    
-    #Samples assigned by NN
-    for level in ['fine', 'int', 'coarse']:
-        leveldict = dict(zip(comb_stats_df.sample_id, comb_stats_df[f'res_{level}']))
-        comb_stats_df.loc[(comb_stats_df.species_call.isnull()) & \
-            (~comb_stats_df[f'res_{level}'].isnull()), 'call_method'] = f'NN_{level}'
-        comb_stats_df.loc[comb_stats_df.call_method == f'NN_{level}', \
-            'species_call'] = comb_stats_df.loc[comb_stats_df.call_method == \
-            f'NN_{level}', 'sample_id'].map(leveldict)
-        
-    #Rainbow samples
-    comb_stats_df.loc[(comb_stats_df.species_call.isnull()) & \
-        (comb_stats_df.NN_assignment=='yes'), 'call_method'] = 'NN'
-    comb_stats_df.loc[comb_stats_df.call_method=='NN', 'species_call'] = 'RAINBOW_SAMPLE'
-
-    #Samples with too few targets
-    comb_stats_df.loc[comb_stats_df.NN_assignment=='no', 'call_method'] = 'TOO_FEW_TARGETS'
-    comb_stats_df.loc[comb_stats_df.NN_assignment=='no', 'species_call'] = 'TOO_FEW_TARGETS'
-
-    assert not comb_stats_df.species_call.isnull().any(), 'some samples not assigned'
-    assert not comb_stats_df.call_method.isnull().any(), 'some samples not assigned'
-
-    return comb_stats_df
-
 def generate_summary(ch_assignments, comb_stats_df, version_name):
     summary = []
     summary.append(f'Convex hull assignment assignment using reference version {version_name}')
@@ -658,9 +615,6 @@ def vae(args):
         if not bool(args.no_plotting):
             fig, _ = plot_VAE_assignments(ch_assignment_df, ref_coordinates, colordict)
             fig.savefig(f'{args.outdir}/vae_assignment.png')
-    
-    final_assignments = finalise_assignments(comb_stats_df, ch_assignment_df)
-    final_assignments.to_csv(f'{args.outdir}/final_assignments.tsv', sep='\t', index=False)
 
     summary_text = generate_summary(ch_assignment_df, comb_stats_df, version_name)
     logging.info(f'writing summary file to {args.outdir}')
