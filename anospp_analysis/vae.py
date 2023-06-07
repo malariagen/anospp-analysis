@@ -654,10 +654,10 @@ def vae(args):
         latent_positions_df = predict_latent_pos(kmer_table, vae_samples, K, vae_weights_file)
         hull_dict = generate_convex_hulls(convex_hulls_df)
         ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
-        ch_assignment_df.to_csv(f'{args.outdir}/ch_assignments.tsv', sep='\t')
+        ch_assignment_df.to_csv(f'{args.outdir}/vae_assignments.tsv', sep='\t')
         if not bool(args.no_plotting):
             fig, _ = plot_VAE_assignments(ch_assignment_df, ref_coordinates, colordict)
-            fig.savefig(f'{args.outdir}/VAE_assignment.png')
+            fig.savefig(f'{args.outdir}/vae_assignment.png')
     
     final_assignments = finalise_assignments(comb_stats_df, ch_assignment_df)
     final_assignments.to_csv(f'{args.outdir}/final_assignments.tsv', sep='\t', index=False)
@@ -679,7 +679,7 @@ def main():
                         anospp-nn', required=True)
     parser.add_argument('-r', '--reference_version', help='Reference index version - \
                         currently a directory name. Default: gcrefv1', default='gcrefv1')
-    parser.add_argument('-o', '--outdir', help='Output directory. Default: nn', default='vae')
+    parser.add_argument('-o', '--outdir', help='Output directory. Default: vae', default='vae')
     parser.add_argument('--path_to_refversion', help='path to reference index version.\
          Default: ref_databases', default='ref_databases')
     parser.add_argument('--no_plotting', help='Do not generate plots. Default: False', \
