@@ -443,7 +443,8 @@ def nn(args):
     error_seqs = identify_error_seqs(mosq_hap_df, kmers, int(args.kmer_length), int(args.n_error_snps))
     non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
     non_error_hap_df = recompute_haplotype_coverage(non_error_hap_df)
-    non_error_hap_df.to_csv(f'{args.outdir}/non_error_haplotypes.tsv', index=False, sep='\t')
+    non_error_hap_df[['sample_id','target','consensus','reads','seqid','total_reads','reads_fraction',\
+                    'nalleles']].to_csv(f'{args.outdir}/non_error_haplotypes.tsv', index=False, sep='\t')
     
     nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
     nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
@@ -462,7 +463,8 @@ def nn(args):
             args.high_contamination_multi_allelic_threshold)
 
     logging.info(f'writing assignment results to {args.outdir}')
-    comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
+    comb_stats_df[['sample_id','multiallelic_mosq_targets','mosq_reads','mosq_targets_recovered','NN_assignment','res_coarse',\
+                   'res_int','res_fine','contamination_risk']].to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
     
     summary_text = generate_summary(comb_stats_df, version_name)
     logging.info(f'writing summary file to {args.outdir}')
