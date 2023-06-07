@@ -654,7 +654,7 @@ def vae(args):
         latent_positions_df = predict_latent_pos(kmer_table, vae_samples, K, vae_weights_file)
         hull_dict = generate_convex_hulls(convex_hulls_df)
         ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
-        ch_assignment_df.to_csv(f'{args.outdir}/vae_assignments.tsv', sep='\t')
+        ch_assignment_df.to_csv(f'{args.outdir}/vae_assignment.tsv', sep='\t')
         if not bool(args.no_plotting):
             fig, _ = plot_VAE_assignments(ch_assignment_df, ref_coordinates, colordict)
             fig.savefig(f'{args.outdir}/vae_assignment.png')
