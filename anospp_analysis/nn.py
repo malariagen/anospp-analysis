@@ -182,7 +182,7 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     error_seqs = []
     for _, cand in error_candidates.iterrows():
         possible_sources = mosq_hap_df.query('(sample_id == @cand.sample_id) & (target == @cand.target) & \
-                                             & (seqid != @cand.seqid)')
+                                             (seqid != @cand.seqid)')
         cand_parsed_seqid = parse_seqid(cand.seqid)
         possible_sources_parsed_seqids = parse_seqids_series(possible_sources.seqid)
         for possible_source in possible_sources_parsed_seqids['uidx']:
