@@ -66,8 +66,6 @@ def agg(args):
     expanded_results_df.to_csv(f'{args.outdir}/anospp_results.tsv', sep='\t', index=False)
 
 
-
-
 def main():
     
     parser = argparse.ArgumentParser("Merging ANOSPP results")
@@ -85,7 +83,7 @@ def main():
 
     args = parser.parse_args()
     args.outdir=args.outdir.rstrip('/')
-    vae(args)
+    agg(args)
 
 if __name__ == '__main__':
     main()
