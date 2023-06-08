@@ -14,8 +14,8 @@ numpy = "*"
 seaborn = "*"
 BioPython = "*"
 cutadapt = "*"
-keras = "*"
-tensorflow = "*"
+keras = "^2.12"
+tensorflow = "^2.12"
 bokeh = "*"
 
 [tool.poetry.group.dev.dependencies]
