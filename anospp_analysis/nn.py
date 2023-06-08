@@ -398,22 +398,39 @@ def generate_summary(comb_stats_df, version_name):
     
     return '\n'.join(summary)
 
-def plot_assignment_proportions(nn_level_result_df, level_label, colors, nn_asgn_threshold):
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, colors,\
+                                 nn_asgn_threshold):
     
     logging.info(f'Generate {level_label} level plots')
     #Generate bar plots at given assignment level
-    width = min(20, .5*nn_level_result_df.shape[0])
-    fig, ax = plt.subplots(figsize=(width,7))
-    nn_level_result_df.plot(kind='bar', stacked=True, width=1, ax=ax, color=colors)
-    ax.set_xticklabels('')
-    ax.set_xticks([])
-    ax.set_title(f"{level_label} level assignment")
-    ax.hlines(float(nn_asgn_threshold), -.5, nn_level_result_df.shape[0]-.5, color='k', ls = ':', linewidth=1)
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0+3/7*box.height, box.width, box.height*4/7])
-    leg1 = ax.legend(loc='upper center', ncol=7, bbox_to_anchor=(0.5, -.05), fontsize=8.7)
-    ax.margins(y=0)
-    return fig, ax
+    #Get row and col info from well_id for ordering samples
+    comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
+    comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
+    comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
+    #add samples with <10 targets
+    nn_level_result_df = pd.concat([nn_level_result_df, pd.DataFrame(index=comb_stats_df.loc[\
+        ~comb_stats_df.sample_id.isin(nn_level_result_df.index), 'sample_id'])]).fillna(0)
+    plates = comb_stats_df.plate_id.unique()
+    fig, axes = plt.subplots(len(plates),1, gridspec_kw={'height_ratios': \
+                                                np.append(np.repeat(4, len(plates)-1), 7)})
+    width=0
+    for i, plate in enumerate(plates):
+        ordered_samples = comb_stats_df.loc[comb_stats_df.plate_id==plate, 'sample_id'].values
+        width = max(width, len(ordered_samples))
+        nn_level_result_df.loc[ordered_samples].plot(kind='bar', stacked=True, width=1, legend=None,\
+                                                     ax=axes[i], color=colors)
+        axes[i].set_xticklabels('')
+        axes[i].set_xticks([])
+        axes[i].hlines(float(nn_asgn_threshold), -.5, nn_level_result_df.loc[ordered_samples].shape[0]-.5, \
+                       color='k', ls = ':', linewidth=1)
+        axes[i].set_title(f"plate {plate}")
+    box = axes[i].get_position()
+    axes[i].set_position([box.x0, box.y0+3/7*box.height, box.width, box.height*4/7])
+    leg1 = axes[i].legend(loc='upper center', ncol=7, bbox_to_anchor=(0.5, -.05), fontsize=8.7)
+    axes[i].margins(y=0)
+    fig.suptitle(f"NN assignment {level_label} level")
+    fig.set_size_inches(min(20,width),len(plates)*4+3)
+    return fig, axes
 
 
 def nn(args):
@@ -473,7 +490,8 @@ def nn(args):
 
     if not bool(args.no_plotting):
         for level in ['coarse', 'int', 'fine']:
-            fig, _ = plot_assignment_proportions(results_df[level], level, colors[level], args.nn_assignment_threshold)
+            fig, _ = plot_assignment_proportions(comb_stats_df, results_df[level], level, colors[level], \
+                                                 args.nn_assignment_threshold)
             fig.savefig(f'{args.outdir}/{level}_assignment.png')
 
     logging.info('ANOSPP NN complete')
