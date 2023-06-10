@@ -182,7 +182,7 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     error_seqs = []
     for _, cand in error_candidates.iterrows():
         possible_sources = mosq_hap_df.query('(sample_id == @cand.sample_id) & (target == @cand.target) & \
-                                             (not seqid in @error_seqs) & (seqid != @cand.seqid)')
+                                             (seqid != @cand.seqid)')
         cand_parsed_seqid = parse_seqid(cand.seqid)
         possible_sources_parsed_seqids = parse_seqids_series(possible_sources.seqid)
         for possible_source in possible_sources_parsed_seqids['uidx']:
@@ -398,22 +398,39 @@ def generate_summary(comb_stats_df, version_name):
     
     return '\n'.join(summary)
 
-def plot_assignment_proportions(nn_level_result_df, level_label, colors, nn_asgn_threshold):
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, colors,\
+                                 nn_asgn_threshold):
     
     logging.info(f'Generate {level_label} level plots')
     #Generate bar plots at given assignment level
-    width = min(20, .5*nn_level_result_df.shape[0])
-    fig, ax = plt.subplots(figsize=(width,7))
-    nn_level_result_df.plot(kind='bar', stacked=True, width=1, ax=ax, color=colors)
-    ax.set_xticklabels('')
-    ax.set_xticks([])
-    ax.set_title(f"{level_label} level assignment")
-    ax.hlines(float(nn_asgn_threshold), -.5, nn_level_result_df.shape[0]-.5, color='k', ls = ':', linewidth=1)
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0+3/7*box.height, box.width, box.height*4/7])
-    leg1 = ax.legend(loc='upper center', ncol=7, bbox_to_anchor=(0.5, -.05), fontsize=8.7)
-    ax.margins(y=0)
-    return fig, ax
+    #Get row and col info from well_id for ordering samples
+    comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
+    comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
+    comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
+    #add samples with <10 targets
+    nn_level_result_df = pd.concat([nn_level_result_df, pd.DataFrame(index=comb_stats_df.loc[\
+        ~comb_stats_df.sample_id.isin(nn_level_result_df.index), 'sample_id'])]).fillna(0)
+    plates = comb_stats_df.plate_id.unique()
+    fig, axes = plt.subplots(len(plates),1, gridspec_kw={'height_ratios': \
+                                                np.append(np.repeat(4, len(plates)-1), 7)})
+    width=0
+    for i, plate in enumerate(plates):
+        ordered_samples = comb_stats_df.loc[comb_stats_df.plate_id==plate, 'sample_id'].values
+        width = max(width, len(ordered_samples))
+        nn_level_result_df.loc[ordered_samples].plot(kind='bar', stacked=True, width=1, legend=None,\
+                                                     ax=axes[i], color=colors)
+        axes[i].set_xticklabels('')
+        axes[i].set_xticks([])
+        axes[i].hlines(float(nn_asgn_threshold), -.5, nn_level_result_df.loc[ordered_samples].shape[0]-.5, \
+                       color='k', ls = ':', linewidth=1)
+        axes[i].set_title(f"plate {plate}")
+    box = axes[i].get_position()
+    axes[i].set_position([box.x0, box.y0+3/7*box.height, box.width, box.height*4/7])
+    leg1 = axes[i].legend(loc='upper center', ncol=7, bbox_to_anchor=(0.5, -.05), fontsize=8.7)
+    axes[i].margins(y=0)
+    fig.suptitle(f"NN assignment {level_label} level")
+    fig.set_size_inches(min(20,width),len(plates)*4+3)
+    return fig, axes
 
 
 def nn(args):
@@ -443,7 +460,8 @@ def nn(args):
     error_seqs = identify_error_seqs(mosq_hap_df, kmers, int(args.kmer_length), int(args.n_error_snps))
     non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
     non_error_hap_df = recompute_haplotype_coverage(non_error_hap_df)
-    non_error_hap_df.to_csv(f'{args.outdir}/non_error_haplotypes.tsv', index=False, sep='\t')
+    non_error_hap_df[['sample_id','target','consensus','reads','seqid','total_reads','reads_fraction',\
+                    'nalleles']].to_csv(f'{args.outdir}/non_error_haplotypes.tsv', index=False, sep='\t')
     
     nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
     nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
@@ -462,7 +480,8 @@ def nn(args):
             args.high_contamination_multi_allelic_threshold)
 
     logging.info(f'writing assignment results to {args.outdir}')
-    comb_stats_df.to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
+    comb_stats_df[['sample_id','multiallelic_mosq_targets','mosq_reads','mosq_targets_recovered','NN_assignment','res_coarse',\
+                   'res_int','res_fine','contamination_risk']].to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
     
     summary_text = generate_summary(comb_stats_df, version_name)
     logging.info(f'writing summary file to {args.outdir}')
@@ -471,7 +490,8 @@ def nn(args):
 
     if not bool(args.no_plotting):
         for level in ['coarse', 'int', 'fine']:
-            fig, _ = plot_assignment_proportions(results_df[level], level, colors[level], args.nn_assignment_threshold)
+            fig, _ = plot_assignment_proportions(comb_stats_df, results_df[level], level, colors[level], \
+                                                 args.nn_assignment_threshold)
             fig.savefig(f'{args.outdir}/{level}_assignment.png')
 
     logging.info('ANOSPP NN complete')
