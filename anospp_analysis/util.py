@@ -211,6 +211,9 @@ def prep_samples(samples_fn):
     assert ~samples_df.lims_well_id.isna().any(), 'Could not infer well_id for all samples'
     assert samples_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
 
+    # deduplicate plate IDs
+    samples_df['plate_id'] = samples_df['lims_plate_id'] + ' ' + samples_df['plate_id']
+
     return samples_df
 
 def prep_stats(stats_fn):
