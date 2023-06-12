@@ -8,15 +8,6 @@ import argparse
 
 from .util import *
 
-DADA2_COLS = OrderedDict([
-    ('input','removed by filterAndTrim'), 
-    ('filtered','removed by denoising'),
-    ('denoised','removed by merging'), 
-    ('merged','removde by rmchimera'), 
-    ('nonchim','removed by post-filtering'),
-    ('final','retained')
-])
-
 def plot_target_balance(hap_df):
 
     logging.info('plotting targets balance')
@@ -24,7 +15,11 @@ def plot_target_balance(hap_df):
     reads_per_sample = hap_df.groupby(['sample_id','target'])['reads'].sum().reset_index()
     # logscale, remove zeroes
     reads_per_sample['log10_reads'] = reads_per_sample.reads.replace(0,np.nan).apply(lambda x: np.log10(x))
-    fig, ax = plt.subplots(1, 1, figsize=(20,4))
+    if hap_df['target'].isin(TARGETS).all():
+        figsize = (20,4)
+    else:
+        figsize = (hap_df['target'].nunique() * 0.3, 6)
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
     sns.stripplot(data=reads_per_sample,
         x = 'target', y = 'log10_reads', hue = 'target', 
         alpha = .1, jitter = .3,
@@ -32,6 +27,8 @@ def plot_target_balance(hap_df):
     ax.get_legend().remove()
     ax.set_ylabel('reads (log10)')
     ax.set_xlabel('target')
+    ax.tick_params(axis='x', rotation=90)
+    plt.tight_layout
 
     return fig, ax
 
@@ -81,20 +78,30 @@ def plot_sample_target_heatmap(hap_df, samples_df, col):
                     linecolor='silver', 
                     ax=ax, 
                     cbar_kws={'ticks':range(max_int)})
+        ax.set_title(plate)
     plt.tight_layout()
 
     return fig, axs
 
-def plot_sample_filtering(sample_stats_df, samples_df, dada2_cols=DADA2_COLS):
+def plot_sample_filtering(comb_stats_df):
     
     logging.info('plotting per-sample filtering barplots')
+
+    # comb_stats_df colname : legend label
+    dada2_cols = OrderedDict([
+        ('input','removed by filterAndTrim'), 
+        ('filtered','removed by denoising'),
+        ('denoised','removed by merging'), 
+        ('merged','removde by rmchimera'), 
+        ('nonchim','removed by post-filtering'),
+        ('final','retained')
+        ])
     
-    plates = samples_df.plate_id.unique()
+    plates = comb_stats_df.plate_id.unique()
     nplates = len(plates)
     fig, axs = plt.subplots(nplates,1,figsize=(20, 4 * nplates))
     for plate, ax in zip(plates, axs):
-        plate_samples = samples_df.loc[samples_df.plate_id == plate, 'sample_id']
-        plot_df = sample_stats_df[sample_stats_df['sample_id'].isin(plate_samples)]
+        plot_df = comb_stats_df[comb_stats_df.plate_id == plate]
         for i, col in enumerate(dada2_cols.keys()):
             sns.barplot(x='sample_id',  y=f'{col}_log10', data=plot_df, 
                         color=sns.color_palette()[i], ax=ax, label=dada2_cols[col])
@@ -234,8 +241,10 @@ def qc(args):
     samples_df = prep_samples(args.manifest)
     hap_df = prep_hap(args.haplotypes)
     stats_df = prep_stats(args.stats)
-
+    
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
+
+    comb_stats_df.to_csv(f'{args.outdir}/combined_stats.csv')
 
     logging.info('ANOSPP QC plotting started')
 
@@ -246,10 +255,11 @@ def qc(args):
     fig.savefig(f'{args.outdir}/allele_balance.png')
 
     for col in ('nalleles','total_reads'):
+        continue
         fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col=col)
         fig.savefig(f'{args.outdir}/sample_target_{col}.png')
 
-    fig, _ = plot_sample_filtering(stats_df, samples_df)
+    fig, _ = plot_sample_filtering(comb_stats_df)
     fig.savefig(f'{args.outdir}/filter_per_sample.png')
 
     fig, _ = plot_plate_stats(comb_stats_df, lims_plate=False)

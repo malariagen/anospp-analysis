@@ -89,7 +89,7 @@ def seqid_generator(hap_df):
 
     return hap_df
 
-def prep_hap(hap_fn):
+def prep_hap(hap_fn, anospp=True):
     '''
     load haplotypes table
     '''
@@ -129,9 +129,12 @@ def prep_hap(hap_fn):
         
     hap_df = seqid_generator(hap_df)
 
-    hap_df['target'] = pd.Categorical(hap_df['target'], 
-                                    categories=CUTADAPT_TARGETS, 
-                                    ordered=True)
+    if hap_df['target'].isin(CUTADAPT_TARGETS).all():
+        hap_df['target'] = pd.Categorical(hap_df['target'], 
+                                        categories=CUTADAPT_TARGETS, 
+                                        ordered=True)
+    else:
+        logging.warning('unexpected targets found, targets order will be unstable')
     
     hap_df.sort_values(by=[
         'sample_id',
