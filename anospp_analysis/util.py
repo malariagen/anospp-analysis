@@ -286,6 +286,9 @@ def combine_stats(stats_df, hap_df, samples_df):
     comb_stats_df['targets_recovered'] = hap_df.groupby('sample_id') \
         ['target'].nunique()
     comb_stats_df['targets_recovered'] = comb_stats_df['targets_recovered'].fillna(0)
+    comb_stats_df['multiallelic_targets'] = (hap_df.groupby('sample_id')['target'].value_counts() > 2) \
+        .groupby(level='sample_id').sum()
+    comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0)
     comb_stats_df['raw_mosq_targets_recovered'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['target'].nunique()
     comb_stats_df['raw_mosq_targets_recovered'] = comb_stats_df['raw_mosq_targets_recovered'].fillna(0)
