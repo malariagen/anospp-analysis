@@ -252,7 +252,7 @@ def qc(args):
 
     logging.info('starting plotting QC')
     
-    if hap_df['target'].isin(TARGETS).all():
+    if hap_df['target'].isin(CUTADAPT_TARGETS).all():
         anospp = True
         logging.info('only ANOSPP targets detected, plotting ANOSPP QC')
     else:
@@ -266,7 +266,6 @@ def qc(args):
     fig.savefig(f'{args.outdir}/allele_balance.png')
 
     for col in ('nalleles','total_reads'):
-        continue
         fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col=col)
         fig.savefig(f'{args.outdir}/sample_target_{col}.png')
 

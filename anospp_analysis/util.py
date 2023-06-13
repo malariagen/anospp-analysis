@@ -4,8 +4,8 @@ import logging
 
 MOSQ_TARGETS = [str(i) for i in range(62)]
 PLASM_TARGETS = ['P1','P2']
-TARGETS = MOSQ_TARGETS + PLASM_TARGETS
-CUTADAPT_TARGETS = TARGETS + ['unknown']
+ANOSPP_TARGETS = MOSQ_TARGETS + PLASM_TARGETS
+CUTADAPT_TARGETS = ANOSPP_TARGETS + ['unknown']
 
 def setup_logging(verbose=False):
     try: 
