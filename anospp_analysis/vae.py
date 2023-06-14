@@ -621,7 +621,7 @@ def vae(args):
     with open(f'{args.outdir}/summary.txt', 'w') as fn:
         fn.write(summary_text)
 
-    logging.info('All done!')
+    logging.info('ANOSPP VAE complete')
 
     
 def main():

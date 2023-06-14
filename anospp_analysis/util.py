@@ -4,8 +4,8 @@ import logging
 
 MOSQ_TARGETS = [str(i) for i in range(62)]
 PLASM_TARGETS = ['P1','P2']
-TARGETS = MOSQ_TARGETS + PLASM_TARGETS
-CUTADAPT_TARGETS = TARGETS + ['unknown']
+ANOSPP_TARGETS = MOSQ_TARGETS + PLASM_TARGETS
+CUTADAPT_TARGETS = ANOSPP_TARGETS + ['unknown']
 
 def setup_logging(verbose=False):
     try: 
@@ -89,7 +89,7 @@ def seqid_generator(hap_df):
 
     return hap_df
 
-def prep_hap(hap_fn):
+def prep_hap(hap_fn, anospp=True):
     '''
     load haplotypes table
     '''
@@ -129,9 +129,12 @@ def prep_hap(hap_fn):
         
     hap_df = seqid_generator(hap_df)
 
-    hap_df['target'] = pd.Categorical(hap_df['target'], 
-                                    categories=CUTADAPT_TARGETS, 
-                                    ordered=True)
+    if hap_df['target'].isin(CUTADAPT_TARGETS).all():
+        hap_df['target'] = pd.Categorical(hap_df['target'], 
+                                        categories=CUTADAPT_TARGETS, 
+                                        ordered=True)
+    else:
+        logging.warning('unexpected targets found, targets order will be unstable')
     
     hap_df.sort_values(by=[
         'sample_id',
@@ -211,6 +214,9 @@ def prep_samples(samples_fn):
     assert ~samples_df.lims_well_id.isna().any(), 'Could not infer well_id for all samples'
     assert samples_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
 
+    # deduplicate plate IDs
+    samples_df['plate_id'] = samples_df['lims_plate_id'] + ' ' + samples_df['plate_id']
+
     return samples_df
 
 def prep_stats(stats_fn):
@@ -280,6 +286,9 @@ def combine_stats(stats_df, hap_df, samples_df):
     comb_stats_df['targets_recovered'] = hap_df.groupby('sample_id') \
         ['target'].nunique()
     comb_stats_df['targets_recovered'] = comb_stats_df['targets_recovered'].fillna(0)
+    comb_stats_df['multiallelic_targets'] = (hap_df.groupby('sample_id')['target'].value_counts() > 2) \
+        .groupby(level='sample_id').sum()
+    comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0)
     comb_stats_df['raw_mosq_targets_recovered'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['target'].nunique()
     comb_stats_df['raw_mosq_targets_recovered'] = comb_stats_df['raw_mosq_targets_recovered'].fillna(0)

@@ -33,8 +33,8 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     hap_df = hap_df.astype({'target': str})
     filtered_hap_df = hap_df[(hap_df.reads>=int(rc_threshold)) & (hap_df.reads_fraction>=float(rf_threshold))]
     if filtered_hap_df.shape[0] < hap_df.shape[0]:
-        logging.warning(f'Removed {hap_df.shape[0] - filtered_hap_df.shape[0]} haplotypes \
-                    with fewer than {rc_threshold} reads or lower fracion than {rf_threshold} of reads')
+        logging.warning(f'removed {hap_df.shape[0] - filtered_hap_df.shape[0]} haplotypes'
+                        f'with fewer than {rc_threshold} reads or lower fracion than {rf_threshold} of reads')
     mosq_hap_df = filtered_hap_df[filtered_hap_df.target.isin(MOSQ_TARGETS)]
     mosq_hap_df = mosq_hap_df.astype({'target': int})
 
@@ -342,9 +342,9 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets, 
         (comb_stats_df.mosq_reads<int(rc_med_threshold)), 'contamination_risk'] = 'medium'
     comb_stats_df.loc[comb_stats_df.contamination_risk.isnull(), 'contamination_risk'] = 'low'
 
-    logging.info(f"Identified {(comb_stats_df.contamination_risk=='high').sum()} samples with high contamination risk, \
-        \n {(comb_stats_df.contamination_risk=='medium').sum()} samples with medium contamination risk \
-        \n and {(comb_stats_df.contamination_risk=='low').sum()} samples with low contamination risk")
+    logging.info(f'identified {(comb_stats_df.contamination_risk=="high").sum()} samples with high contamination risk, '
+                 f'{(comb_stats_df.contamination_risk=="medium").sum()} samples with medium contamination risk '
+                 f'and {(comb_stats_df.contamination_risk=="low").sum()} samples with low contamination risk')
 
     return comb_stats_df
 
@@ -401,7 +401,7 @@ def generate_summary(comb_stats_df, version_name):
 def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, colors,\
                                  nn_asgn_threshold):
     
-    logging.info(f'Generate {level_label} level plots')
+    logging.info(f'generating {level_label} level plots')
     #Generate bar plots at given assignment level
     #Get row and col info from well_id for ordering samples
     comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
