@@ -191,8 +191,13 @@ def prep_samples(samples_fn):
         try:
             plate_well_ids = samples_df['sample_id'].str.rsplit('-', n = 1).str.get(0)
             samples_df[['plate_id', 'well_id']] = plate_well_ids.str.rsplit('_', n = 1, expand=True)
+            # do not allow for non-standard well IDs
             assert samples_df.well_id.isin(well_id_mapper().values()).all()
+            # do not allow for duplicate plate IDs - issues with plotting
+            assert (samples_df.plate_id.value_counts() <= 96).all()
+            logging.info('inferring plate_id and well_id from sample_id')
         except:
+            logging.info('inferring plate_id and well_id from tags')
             samples_df['plate_id'] = samples_df.apply(lambda r: f'p_{r.run_id}_{(r.tag_index - 1) // 96 + 1}',
                 axis=1)
             samples_df['well_id'] = (samples_df.tag_index % 96).replace(well_id_mapper())
@@ -203,19 +208,18 @@ def prep_samples(samples_fn):
     # id_library_lims as `{lims_plate_id}:{lims_well_id}`
     if ('id_library_lims' in samples_df.columns and
         samples_df.id_library_lims.str.contains(':').all()):
+            logging.info('inferring lims_plate_id from id_library_lims')
             samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(':', 
                                                                                                 n = 1, 
                                                                                                 expand=True)
     else:
+        logging.info('inferring lims_plate_id from tags')
         samples_df['lims_plate_id'] = samples_df.apply(lambda r: f'lp_{r.run_id}_{(r.tag_index - 1) // 384 + 1}',
             axis=1)
         samples_df['lims_well_id'] = (samples_df.tag_index % 384).replace(lims_well_id_mapper())
     assert ~samples_df.lims_plate_id.isna().any(), 'Could not infer plate_id for all samples'
     assert ~samples_df.lims_well_id.isna().any(), 'Could not infer well_id for all samples'
     assert samples_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
-
-    # deduplicate plate IDs
-    samples_df['plate_id'] = samples_df['lims_plate_id'] + ' ' + samples_df['plate_id']
 
     return samples_df
 
