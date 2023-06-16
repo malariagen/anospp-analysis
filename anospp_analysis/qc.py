@@ -40,7 +40,7 @@ def plot_allele_balance(hap_df):
     het_plot = sns.jointplot(x=het_frac, y=het_reads_log, 
         kind="hex", height=8)
     het_plot.ax_joint.set_ylabel('reads (log10)')
-    het_plot.ax_joint.set_ylabel('allele fraction')
+    het_plot.ax_joint.set_xlabel('allele fraction')
     
     return het_plot
 
