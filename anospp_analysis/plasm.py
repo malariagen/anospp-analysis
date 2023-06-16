@@ -1,8 +1,8 @@
 import argparse
 import os
+import sys
 import subprocess
 from subprocess import run
-import sys
 import seaborn as sns
 import matplotlib
 matplotlib.use('Agg')
@@ -19,17 +19,17 @@ def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title
     Plot a heatmap of the total read count for a given target on a plate.
 
     Args:
-        df (pandas.DataFrame): A dataframe containing the read counts and positions on the plate.
-        target (str): The name of the target (e.g. 'P1', 'P2').
-        plate (str): The name of the plate. Default is None.
-        fname: The name of the file to save the plot to. Default is None.
-        annot (bool): Whether to annotate the heatmap cells with their values. Default is True.
-        cmap (str or colormap): The colormap to use. Default is 'coolwarm'.
-        center (float): The value at which to center the colormap. Default is None.
-        title (str): The title of the plot. Default is None.
+    - df (pandas.DataFrame): A dataframe containing the read counts and positions on the plate.
+    - target (str): The name of the target (e.g. 'P1', 'P2').
+    - plate (str): The name of the plate. Default is None.
+    - fname (str): The name of the file to save the plot to. Default is None.
+    - annot (bool): Whether to annotate the heatmap cells with their values. Default is True.
+    - cmap (str or colormap): The colormap to use. Default is 'coolwarm'.
+    - title (str): The title of the plot. Default is None.
+    - center (float): The value at which to center the colormap. Default is None.
 
     Returns:
-        None
+    - None
     """
 
     logging.info(f"plotting a heatmap for each lims plate for {target}")
@@ -66,13 +66,13 @@ def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title
     # Close the plot to free up memory.
     plt.close(fig)
 
-def plot_bar(df, reference, fname):
+def plot_bar(df, reference_path, fname):
     """
     Plots stacked bar charts of plasmodium species counts, grouped by plasmodium status for each plate.
 
     Args:
     - df: pandas DataFrame containing the plasmodium species and status counts for each plate
-    - fname: str, file name to save the plot
+    - fname (str): file name to save the plot
 
     Returns:
     - None
@@ -87,11 +87,11 @@ def plot_bar(df, reference, fname):
     plasmodium_count = pd.DataFrame({'count': data.groupby(["plasmodium_species", "plasmodium_status"]).size()}).reset_index()
 
     # Load colors
-    if not os.path.isfile(f'{reference}/species_colours.csv'):
+    if not os.path.isfile(f'{reference_path}/species_colours.csv'):
         logging.warning('No colors defined for plotting.')
         cmap = {}
     else:
-        colors = pd.read_csv(f'{reference}/species_colours.csv')
+        colors = pd.read_csv(f'{reference_path}/species_colours.csv')
         cmap = dict(zip(colors['species'], colors['color']))
 
     # Assign grey color to data with more than one species
@@ -119,20 +119,21 @@ def plot_bar(df, reference, fname):
     plt.savefig(fname, dpi=300, bbox_inches='tight')
 
 
-def hard_filter_haplotypes(hap_df, filter_p1, filter_p2):
+def hard_filter_haplotypes(hap_df, hard_filters):
 
     """
     Processes haplotype data and filters it according to read counts.
 
     Args:
-        hap_df (pd.DataFrame): Dataframe containing haplotype data.
-        comb_stats_df (pd.DataFrame): Dataframe containing various useful statistics.
-        filter_p1 (int): Minimum read count for haplotypes associated with target P1.
-        filter_p2 (int): Minimum read count for haplotypes associated with target P2.
+    - hap_df (pd.DataFrame): Dataframe containing haplotype data.
+    - comb_stats_df (pd.DataFrame): Dataframe containing various useful statistics.
+    - hard_filters (int): A tupule containing the filters for the P1 and P2 targest
 
     Returns:
-        pd.DataFrame: Filtered dataframe containing haplotype data with read counts meeting the specified thresholds.
+    - pd.DataFrame: Filtered dataframe containing haplotype data with read counts meeting the specified thresholds.
     """
+    #unpack the hard filters
+    filter_p1, filter_p2 = map(int, hard_filters.split(','))
 
     logging.info(f'filtering the haplotype data, cutoffs: P1 - {filter_p1}, P2 - {filter_p2}')
     
@@ -153,10 +154,10 @@ def create_hap_data(hap_df):
     Create a dataframe with haplotype and reads/sample stats from a haplotype dataframe.
 
     Args:
-        hap_df (pandas.DataFrame): The haplotype dataframe.
+    - hap_df (pandas.DataFrame): The haplotype dataframe.
 
     Returns:
-        pandas.DataFrame: A dataframe with haplotype and reads/sample stats.
+    - pandas.DataFrame: A dataframe with haplotype and reads/sample stats.
     """
 
     logging.info(f"creating a dataframe with haplotype and reads/sample stats.")
@@ -189,21 +190,14 @@ def haplotype_summary(hap_df, target, workdir):
     """
     Generate a summary of haplotype data for a specific target.
 
-    Parameters:
-    -----------
-    hap_df : pandas DataFrame
-        The input haplotype DataFrame.
-    target : str
-        The haplotype target.
-    workdir : str
-        The output directory for the summary (work).
+    Args:
+    - hap_df (DataFrame): The input haplotype DataFrame.
+    - target (str): The haplotype target.
+    - workdir (str): The output directory for the summary (work).
 
     Returns:
-    --------
-    haplotype_df : pandas DataFrame
-        The haplotype summary DataFrame.
-    new_cols : list
-        The list of new column names for the summary DataFrame.
+    - haplotype_df (DataFrame): The haplotype summary DataFrame.
+    - new_cols (list): The list of new column names for the summary DataFrame.
     """
 
     logging.info(f"processing the haplotype data for {target} and generating a table summary.")
@@ -259,21 +253,20 @@ def haplotype_summary(hap_df, target, workdir):
 
     return haplotype_df, new_cols
 
-def run_blast(hap_data, target, workdir, blastdb):
+def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
 
     """
     Runs blast on haplotype data for a given target and returns a filtered dataframe.
     
     Args:
-    hap_data (pd.DataFrame): A pandas DataFrame containing haplotype data.
-    target (str): A string representing the target.
-    workdir (str): A string representing the working directory.
-    blastdb (str): A string representing the path to the blast database.
-    filter_F1 (int): An integer representing the filter for target P1. Default is 10.
-    filter_F2 (int): An integer representing the filter for target P2. Default is 10.
+    - hap_data (pd.DataFrame): A pandas DataFrame containing haplotype data.
+    - target (str): A string representing the target.
+    - workdir (str): A string representing the working directory.
+    - path_to_refversion, (str): A path to the reference directory.
+    - reference_version, (str): A string representing the reference version to be used.
     
     Returns:
-    pd.DataFrame: A filtered pandas DataFrame containing the blast results for the haplotype data.
+    - pd.DataFrame: A filtered pandas DataFrame containing the blast results for the haplotype data.
     """
 
     logging.info(f'running blast for {target}')
@@ -295,6 +288,17 @@ def run_blast(hap_data, target, workdir, blastdb):
         for index, row in df.iterrows():
             output.write(">"+ index + "." + str(row['combUIDx'])+ "\n")
             output.write(row['consensus'] + "\n")
+
+    #load the blast db from the reference path
+    reference_path = f'{path_to_refversion}/{reference_version}/'
+
+    assert os.path.isdir(reference_path), f'reference version {reference_version} does not exist at {reference_path}'
+
+    assert os.path.isfile(f'{reference_path}/plasmomito_P1P2_DB.ndb'), f'reference version {reference_version} at {reference_path} \
+        does not contain required plasmomito_P1P2_DB.ndb file'
+    
+    blastdb = f'{path_to_refversion}/{reference_version}/plasmomito_P1P2_DB'
+
 
     # Run blast and capture the output
     cmd = f"blastn -db {blastdb} \
@@ -326,12 +330,16 @@ def run_blast(hap_data, target, workdir, blastdb):
 
     return blast_df
 
-def filter_blast(blast_df, target, filter_F1=10, filter_F2=10, filter_falciparum=False):
+def filter_blast(blast_df, target, soft_filters, filter_falciparum=False):
 
     # Filter out oversensitive haplotypes of Plasmodium falciparum for both P1 and P2
     logging.info('filtering blast output for falciparum')
 
     if filter_falciparum:
+
+        #unpack the soft filters
+        filter_F1, filter_F2 = map(int, soft_filters.split(','))
+
         if target == 'P1':
             df_f = blast_df[blast_df['combUID'].isin(['F1-0']) & (blast_df['reads']>= int(filter_F1))]
             df_x = blast_df[~blast_df['combUID'].isin(['F1-0'])]
@@ -352,16 +360,15 @@ def haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_filt_df, w
     Calculate haplotype diversity for a given target and write the results to a file.
 
     Args:
-        haplotype_df (pd.DataFrame): DataFrame containing haplotype data
-        target (str): Target (P1 or P2)
-        new_cols (list): List of new haplotype columns to add to the DataFrame
-        hap_df (pd.DataFrame): DataFrame containing haplotype information
-        blast_df (pd.DataFrame): Blast DataFrame
-        outdir (str): Directory to write output file
+    - haplotype_df (pd.DataFrame): DataFrame containing haplotype data
+    - target (str): Target (P1 or P2)
+    - new_cols (list): List of new haplotype columns to add to the DataFrame
+    - hap_df (pd.DataFrame): DataFrame containing haplotype information
+    - blast_filt_df (pd.DataFrame): Filtered blast output DataFrame
+    - outdir (str): Directory to write output file
 
     Returns:
-        pd.DataFrame: DataFrame with haplotype diversity information
-
+    - pd.DataFrame: DataFrame with haplotype diversity information
     """
 
     logging.info(f'determining the haplotype diversity for {target}')
@@ -400,15 +407,19 @@ def haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_filt_df, w
 
     return hap_div_df
 
-def generate_haplotype_tree(target, hap_div_df, workdir, interactive_plotting=False):
+def generate_haplotype_tree(target, hap_div_df, workdir, outdir, interactive_plotting=False):
 
     """
     Generates an alignment, tree files, and a bokeh alignment plot for the haplotypes of a given target.
 
     Args:
-        target: The target to process.
-        hap_div_df: The DataFrame containing the haplotype data.
-        workdir: The path to the directory where the files will be saved.
+    - target: The target to process.
+    - hap_div_df: The DataFrame containing the haplotype data.
+    - workdir: The path to the directory where haps data will be provisionally saved.
+    - outdir: The path to the directory where the files will be saved.
+
+    Returns:
+    - None
     """
 
     logging.info(f'Generating the alignment, tree files, and bokeh alignment plots for {target}')
@@ -436,7 +447,7 @@ def generate_haplotype_tree(target, hap_div_df, workdir, interactive_plotting=Fa
     tree.ladderize(reverse=True)
     fig, ax = plt.subplots(figsize=(20, 10))
     Phylo.draw(tree, axes=ax)
-    fig.savefig(f'{workdir}/haps_{target}_mafft.png')
+    fig.savefig(f'{outdir}/haps_{target}_mafft.png')
     plt.close(fig)
 
     #View and save the Alignment using bokeh
@@ -455,13 +466,13 @@ def create_per_read_summary(blast_filt_df, target, outdir):
     """
     Generates a per-read summary for the given target.
 
-    Parameters:
-        blast_df (pd.DataFrame): The blast dataframe containing the reads.
-        target (str): The target to generate the summary for.
-        outdir (str): The directory to output the summary file to.
+    Args:
+    - blast_df (pd.DataFrame): The blast dataframe containing the reads.
+    - target (str): The target to generate the summary for.
+    - outdir (str): The directory to output the summary file to.
 
     Returns:
-        pd.DataFrame: The summary dataframe.
+    - pd.DataFrame: The summary dataframe.
     """
 
     logging.info(f'generating a per-read summary for {target}')
@@ -478,8 +489,6 @@ def create_per_read_summary(blast_filt_df, target, outdir):
     df_sum.rename(columns={'total_reads':f'total_reads_{target}', f'target':f'target_{target}', 'hap_id':f'haplotype_ID_{target}',
                               f'consensus':f'hap_count_{target}', 'pident':f'pident_{target}', 'reads':f'reads_{target}'}, inplace=True)
 
-    
-
     # Write the dataframe to file
     df_sum.to_csv(f'{outdir}/results_summary_for_{target}.tsv', sep='\t')
 
@@ -487,17 +496,19 @@ def create_per_read_summary(blast_filt_df, target, outdir):
 
 
 def merge_and_export(samples_df, merged_df, workdir):
+    
     """
     Merge summary outputs with metadata and export the resulting dataframe to a specified directory.
 
     Args:
-        samples_df: DataFrame containing metadata for each sample
-        merged_df: DataFrame containing summary outputs for each sample
-        workdir: Directory to save the merged and exported dataframe
+    - samples_df: DataFrame containing metadata for each sample
+    - merged_df: DataFrame containing summary outputs for each sample
+    - workdir: Directory to save the merged and exported dataframe
 
     Returns:
-        A DataFrame containing the merged and exported results with additional columns for sample run and sample ID.
+    - A DataFrame containing the merged and exported results with additional columns for sample run and sample ID.
     """
+
     logging.info(f'merging the summary outputs with the sample metadata and exporting the merged dataframe to the work directory')
 
     # Merge the two dataframes and select only relevant columns
@@ -527,19 +538,20 @@ def merge_and_export(samples_df, merged_df, workdir):
 
     return df_final
 
-def process_results(haps_merged_df, filter_p1, filter_p2, workdir, outdir):
+def process_results(haps_merged_df, hard_filters, workdir, outdir):
 
     """
     Read combined results summary TSV file and compute various metrics.
 
     Args:
-        filter_p1 (str): Filter for Plasmodium P1 reads.
-        filter_p2 (str): Filter for Plasmodium P2 reads.
-        outdir (str): Directory containing the combined results summary TSV file.
-        workdir (str): Working directory.
+    - haps_merged_df (dataframe): Filtered dataframe containing haplotype data with read counts meeting the specified thresholds
+    - hard_filters (int): A tupule containing the filters for the P1 and P2 targets
+    - workdir (str): Working directory.
+    - outdir (str): Directory containing the combined results summary TSV file.
+    
 
     Returns:
-        pd.DataFrame: A pandas DataFrame containing various metrics for the samples.
+    - pd.DataFrame: A pandas DataFrame containing various metrics for the samples.
     """
 
     logging.info(f'reading and processng the combined results summary TSV file and computing stats')
@@ -549,6 +561,9 @@ def process_results(haps_merged_df, filter_p1, filter_p2, workdir, outdir):
 
     logging.info(f'reading results summary file and computing several metrics')
 
+    #unpack the hard filters
+    filter_p1, filter_p2 = map(int, hard_filters.split(','))
+    # read the combined results summary results
     df = pd.read_csv(f'{workdir}/combined_results_summary.tsv', sep='\t').set_index('sample_id')
 
 
@@ -566,10 +581,8 @@ def process_results(haps_merged_df, filter_p1, filter_p2, workdir, outdir):
         df[f'hap_ID_{col}'] = df[f'haplotype_ID_{col}'].apply(lambda d: d.strip('][').split(', ') if isinstance(d, str) else '')
 
     #compute concordance and species
-    # df["concordance"] = df[["reads_P1_name", "reads_P2_name"]].apply(uniques, axis=1).map(list)
     reads_cols = [col for col in ['reads_P1_name', 'reads_P2_name'] if col in df.columns]
     df['concordance'] = df[reads_cols].apply(uniques, axis=1).map(list)
-
 
     #spread out the plasmodium id
     df_all = pd.merge(df, pd.DataFrame(df['concordance'].values.tolist()).add_prefix('plasmodium_id_'), on=df.index)
@@ -584,22 +597,18 @@ def process_results(haps_merged_df, filter_p1, filter_p2, workdir, outdir):
     #count the number of species per sample
     df_all['species_count'] = df['concordance'].apply(len)
 
-    
-
     # Create Plasmodium status categories
     df_all['plasmodium_status'] = 'inconclusive'
     if 'P1_min' in df_all.columns and 'P2_min' in df_all.columns:
-        df_all.loc[(df_all['P1_min'] >= int(filter_p1)) & (df_all['P2_min'] >= int(filter_p2)), 'plasmodium_status'] = 'high_infection'
-        df_all.loc[(df_all['P1_min'] == 0) & (df_all['P2_min'] >= int(filter_p2)), 'plasmodium_status'] = 'low_infection'
-        df_all.loc[(df_all['P1_min'] >= int(filter_p1)) & (df_all['P2_min'] == 0), 'plasmodium_status'] = 'contradictory'
+        df_all.loc[(df_all['P1_min'] >= int(filter_p1)) & (df_all['P2_min'] >= int(filter_p2)), 'plasmodium_status'] = 'consistent'
+        df_all.loc[(df_all['P1_min'] == 0) & (df_all['P2_min'] >= int(filter_p2)), 'plasmodium_status'] = 'P2 only'
+        df_all.loc[(df_all['P1_min'] >= int(filter_p1)) & (df_all['P2_min'] == 0), 'plasmodium_status'] = 'P1 only'
 
     elif 'P1_min' in df_all.columns:
-        df_all.loc[(df_all['P1_min'] >= int(filter_p1)), 'plasmodium_status'] = 'contradictory'
+        df_all.loc[(df_all['P1_min'] >= int(filter_p1)), 'plasmodium_status'] = 'P1 only'
      
     elif 'P2_min' in df_all.columns:
-        df_all.loc[(df_all['P2_min'] >= int(filter_p2)), 'plasmodium_status'] = 'low_infection'
-
-    
+        df_all.loc[(df_all['P2_min'] >= int(filter_p2)), 'plasmodium_status'] = 'P2 only'
 
     # Create column for the presence of conflicts between P1 and P2
     if all(col in df_all.columns for col in ['reads_P1_name', 'reads_P2_name']):
@@ -610,24 +619,27 @@ def process_results(haps_merged_df, filter_p1, filter_p2, workdir, outdir):
     else:
         df_all['P1_P2_consistency'] = 'NO'
     
+    
     # Create column for new haplotypes found
     # check if both P1_min_pident and P2_min_pident are present in the dataframe
     if all(col in df_all.columns for col in ['P1_min_pident', 'P2_min_pident']):
         df_all['new_haplotype'] = np.where(
-            (df_all['P1_min_pident'].fillna(-1) < 100) | (df_all['P2_min_pident'].fillna(-1) < 100), 'YES', 'NO')
+            ((df_all['P1_min_pident'].fillna(-1) < 100) & (df_all['P1_min_pident'].fillna(0) != 0)) |
+            ((df_all['P2_min_pident'].fillna(-1) < 100) & (df_all['P2_min_pident'].fillna(0) != 0)),
+            'YES', 'NO')
+        
     # check if only P1_min_pident is present in the dataframe
     elif 'P1_min_pident' in df_all.columns:
         df_all['new_haplotype'] = np.where(
-            df_all['P1_min_pident'].fillna(-1) < 100, 'YES', 'NO')
+            (df_all['P1_min_pident'].fillna(-1) < 100) & (df_all['P1_min_pident'].fillna(0) != 0), 'YES', 'NO')
     # check if only P1_min_pident is present in the dataframe
     elif 'P2_min_pident' in df_all.columns:
         df_all['new_haplotype'] = np.where(
-            df_all['P2_min_pident'].fillna(-1) < 100, 'YES', 'NO') 
+            df_all['P2_min_pident'].fillna(-1) < 100 & (df_all['P2_min_pident'].fillna(0) != 0), 'YES', 'NO') 
 
     # if none of the two columns are present, set new_haplotype to NO for all rows
     else:
         df_all['new_haplotype'] = 'NO'
-    
 
     # Remove unwanted characters from hap_ID_P1 and hap_ID_P2 columns
     for col in haps_merged_df['target'].unique():
@@ -649,24 +661,24 @@ def process_results(haps_merged_df, filter_p1, filter_p2, workdir, outdir):
 
     df_all_final.to_csv(f'{outdir}/plasmodium_predictions.tsv', sep='\t')
 
-    
-
     return df_all_final
 
-def generate_plots(meta_df_all, haps_merged_df, workdir, reference, interactive_plotting=False):
+def generate_plots(meta_df_all, haps_merged_df, outdir, path_to_refversion, reference_version, interactive_plotting=False):
+    
     """
     Generates plate and bar plots for the given metadata and haplotypes dataframes, and saves them in the specified
     directory.
 
-    Parameters:
-    meta_df_all (pandas.DataFrame): A dataframe containing the metadata results.
-    haps_merged_df (pandas.DataFrame): A dataframe containing the haplotypes data.
-    workdir (str): The path of the directory to save the plots in.
-    reference (str): The reference of the run.
-    interactive_plotting (bool): Whether to create interactive plots. Default is False.
+    Args:
+    - meta_df_all (pandas.DataFrame): A dataframe containing the metadata results.
+    - haps_merged_df (pandas.DataFrame): A dataframe containing the haplotypes data.
+    - workdir (str): The path of the directory to save the plots in.
+    - path_to_refversion, (str): A path to the reference directory.
+    - reference_version, (str): A string representing the reference version to be used.
+    - interactive_plotting (bool): Whether to create interactive plots. Default is False.
 
     Returns:
-    None
+    - None
     """
 
     logging.info(f'generating plate and bar plots')
@@ -675,26 +687,86 @@ def generate_plots(meta_df_all, haps_merged_df, workdir, reference, interactive_
     meta_df_all['lims_row'] = meta_df_all.lims_well_id.str.slice(0,1)
     meta_df_all['lims_col'] = meta_df_all.lims_well_id.str.slice(1).astype(int)
 
+
     # Get the lims plate IDs
     limsplate = meta_df_all.lims_plate_id.unique()
+
+    #create the reference path
+    reference_path = f'{path_to_refversion}/{reference_version}/'
+
+    assert os.path.isfile(f'{reference_path}/species_colours.csv'), f'reference version {reference_version} at {reference_path} \
+        does not contain required species_colours.csv file'
 
     # Make categorical plots for each lims plate
     for lims_plate in limsplate:
         for target in haps_merged_df['target'].unique():
             if interactive_plotting:
                 plot_plate_view(meta_df_all[meta_df_all.lims_plate_id == lims_plate].copy(), 
-                                f'{workdir}/plateview_for_{lims_plate}_{target}.html',
-                                target, reference,
+                                f'{outdir}/plateview_for_{lims_plate}_{target}.html',
+                                target, reference_path,
                                 f'{lims_plate} Plasmodium positive samples for {target}')
+
 
         #Make numerical plots for each lims plate
         for target in haps_merged_df['target'].unique():
             plot_lims_plate(meta_df_all[meta_df_all.lims_plate_id == lims_plate].copy(),
                             target, lims_plate,
-                            f'{workdir}/plateview_heatmap_{lims_plate}_{target}.png', annot=True)
+                            f'{outdir}/plateview_heatmap_{lims_plate}_{target}.png', annot=True)
+
 
     # Make the bar plots
-    plot_bar(meta_df_all, reference, f'{workdir}/bar_plots.png')
+    plot_bar(meta_df_all, reference_path, f'{outdir}/bar_plots.png')
+
+
+
+def generate_stats(samples_df, haps_merged_df, merged_hap_df, df_all, outdir):
+
+    """
+    Generate summary statistics and write them to a file.
+
+    Args:
+    - samples_df (DataFrame): DataFrame containing sample data.
+    - haps_merged_df (DataFrame): DataFrame containing merged haplotype data.
+    - merged_hap_df (DataFrame): DataFrame containing merged haplotype data.
+    - df_all (DataFrame): DataFrame containing all data.
+    - outdir (str): Output directory path.
+
+    Returns:
+    - None
+    """
+
+    logging.info(f"generating stats for this run")
+
+    # Open the file for writing summary statistics
+    with open(f'{outdir}/summary_stats.txt', 'w') as file:
+
+        # Write the total number of samples
+        file.write(f'Total sample count : {samples_df.index.nunique()}\n')
+
+        # Write the number of samples positive for P1
+        samples_positive_P1 = haps_merged_df[(haps_merged_df["target"] == "P1") & ~(haps_merged_df["target"] == "P2")]
+        num_samples_positive_P1 = samples_positive_P1["sample_id"].nunique()
+        file.write(f'Samples exclusively positive for P1 : {num_samples_positive_P1}\n')
+
+        # Write the number of samples positive for P2
+        samples_positive_P2 = haps_merged_df[(haps_merged_df["target"] == "P2") & ~(haps_merged_df["target"] == "P1")]
+        num_samples_positive_P2 = samples_positive_P2["sample_id"].nunique()
+        file.write(f'Samples exclusively positive for P2 : {num_samples_positive_P2}\n')
+
+        # Write the number of samples positive for P1 or P2
+        file.write(f'Sample positive for P1 or P2 : {df_all.index.nunique()}\n')
+
+        # Write the number of samples positive for both P1 and P2
+        file.write(f'Sample positive for P1 and P2 : {len(df_all[~df_all.isnull().any(axis=1)])}\n')
+
+        # Write the number of unique haplotypes for P1
+        file.write(f'Total count of unique P1 haplotypes : {merged_hap_df[merged_hap_df["target"] == "P1"].consensus.nunique()}\n')
+
+        # Write the number of unique haplotypes for P2
+        file.write(f'Total count of unique P2 haplotypes : {merged_hap_df[merged_hap_df["target"] == "P2"].consensus.nunique()}\n')
+
+        # Write the fraction of possible Plasmodium infection
+        file.write(f'Fraction of possible plasmodium infections : {round(df_all.index.nunique() / samples_df.index.nunique() * 100, 2)} %\n')
 
 
 def plasm(args):
@@ -703,11 +775,11 @@ def plasm(args):
     Run the plasm program to analyze ANOSPP QC data, including preparing input data and variables, running BLAST, 
     creating a dataframe, and generating plots.
     
-    Parameters:
-    args (argparse.Namespace): Namespace object containing command line arguments
+    Args:
+    - args (argparse.Namespace): Namespace object containing command line arguments
     
     Returns:
-    None
+    - None
     """
 
     # Set up logging and create output directories
@@ -724,7 +796,8 @@ def plasm(args):
     logging.info('preparing input data and variables')
     stats_df = prep_stats(args.stats)
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-    haps_merged_df = hard_filter_haplotypes(hap_df, args.filter_p1, args.filter_p2)
+    # haps_merged_df = hard_filter_haplotypes(hap_df, args.filter_p1, args.filter_p2)
+    haps_merged_df = hard_filter_haplotypes(hap_df, args.hard_filters)
 
     # Check for presence of PLASM_TARGETS
     logging.info('checking for the presence of PLASM_TARGETS')
@@ -739,25 +812,29 @@ def plasm(args):
         hap_output = []
         for target in haps_merged_df['target'].unique():          
             haplotype_df, new_cols = haplotype_summary(hap_df, target, args.workdir)
-            blast_df = run_blast(haps_merged_df, target, args.workdir, args.blastdb)
-            blast_filt_df = filter_blast(blast_df, target, args.filter_F1, args.filter_F2, args.filter_falciparum)
+            blast_df = run_blast(haps_merged_df, target, args.workdir, args.path_to_refversion, args.reference_version)
+            blast_filt_df = filter_blast(blast_df, target, args.soft_filters, args.filter_falciparum)
             hap_div_df = haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_filt_df, args.workdir)
-            generate_haplotype_tree(target, hap_div_df, args.workdir, args.interactive_plotting)
-            df_list.append(create_per_read_summary(blast_filt_df, target, args.workdir))
+            generate_haplotype_tree(target, hap_div_df, args.workdir, args.outdir, args.interactive_plotting)
+            per_read_summary = create_per_read_summary(blast_filt_df, target, args.workdir)
+            df_list.append(per_read_summary)
             hap_output.append(blast_filt_df)
 
         # Combine blast results and create merged dataframe for all targets
         logging.info('merging blast summary outputs')
         merged_df = pd.concat(df_list, axis=1)
         merge_and_export(samples_df, merged_df, args.workdir)
-        df_all = process_results(haps_merged_df, args.filter_p1, args.filter_p2, args.workdir, args.outdir)
-        merged_hap_df = pd.concat(hap_output, axis=0)[['sample_id', 'hap_id', 'target', 'consensus', 'pident']].copy().set_index('sample_id')
-        merged_hap_df.to_csv(f'{args.outdir}/Plasmodium_haplotypes_for.tsv', sep='\t')
+        df_all = process_results(haps_merged_df, args.hard_filters, args.workdir, args.outdir)
+        merged_hap_df = pd.concat(hap_output, axis=0)[['sample_id', 'hap_id', 'target', 'consensus', 'reads', 'pident']].copy().set_index('sample_id')
+        merged_hap_df.to_csv(f'{args.outdir}/plasmodium_haplotypes.tsv', sep='\t')
+
+        # generate the summary stats text file
+        generate_stats(samples_df, haps_merged_df, merged_hap_df, df_all, args.outdir)
 
         # Merge sample and stats dataframes and generate plots
         logging.info('merging the samples(meta) dataframe with the stats dataframe and creating plots')
         meta_df_all = pd.merge(samples_df.set_index('sample_id'), df_all, left_index=True, right_index=True, how='left')
-        generate_plots(meta_df_all, haps_merged_df, args.workdir, args.reference, args.interactive_plotting)
+        generate_plots(meta_df_all, haps_merged_df, args.outdir, args.path_to_refversion, args.reference_version, args.interactive_plotting)
 
         logging.info('ANOSPP plasm complete')
 
@@ -768,22 +845,23 @@ def main():
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
     parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
-    parser.add_argument('-b', '--blastdb', help='Blast db prefix. Default: ref_v1.0/plasmomito_P1P2_DB_v1.0', 
-        default='ref_v1.0/plasmomito_P1P2_DB_v1.0', required=True)
+    parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
+                        Default: ref_databases', default='ref_databases')
+    parser.add_argument('-r', '--reference_version', help='Reference index version - currently a directory name. \
+                        Default: plasmv1', default='plasmv1')
     parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='plasm')
     parser.add_argument('-w', '--workdir', help='Working directory. Default: work', default='work')
-    parser.add_argument('-d', '--reference', help='Blast db prefix. Default: ref_v1.0', default='ref_v1.0')
-    parser.add_argument('-c', '--readcutoff', help='Read cutoffs. Default: 10', default=10)
-    parser.add_argument('-q', '--filter_p1', help='Plasmodium genus haplotype filter for P1. Default: 10', default=10)
-    parser.add_argument('-r', '--filter_p2', help='Plasmodium genus haplotype filter for P2. Default: 10', default=10)
-    parser.add_argument('-p', '--filter_F1', help='Plasmodium Falciparum main haplotype filter for P1. Default: 10', default=10)
-    parser.add_argument('-l', '--filter_F2', help='Plasmodium Falciparum main haplotype filter for P2. Default: 10', default=10)
+    parser.add_argument('-f', '--hard_filters', help='Remove all sequences supported by less tahn X reads \
+                        for P1 and P2. Default: 10,10')
+    parser.add_argument('-g', '--soft_filters', help='Mark as non-confident any sequences of the predominant haplotype that are \
+                        supported by fewer than X reads for P1 and P2. Default: 10,10')
     parser.add_argument('-i', '--interactive_plotting', 
                             help='do interactive plotting', action='store_true', default=False)
-    parser.add_argument('-f', '--filter_falciparum', 
-                            help='Check for the highest occuring haplotypes of Plasmodium falciparum and filter', action='store_true', default=False)
+    parser.add_argument('--filter_falciparum', help='Check for the highest occuring haplotypes of Plasmodium falciparum and filter', 
+                        action='store_true', default=False)
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
+
 
     args = parser.parse_args()
     args.outdir=args.outdir.rstrip('/')
@@ -793,21 +871,3 @@ def main():
 if __name__ == '__main__':
     main()
 
-
-
-#     # sort out dtypes
-#     int_cols = [
-#         'legacy_library_id', 
-#         'manual_qc', 
-#         'id_run', 
-#         'position', 
-#         'tag_index',
-#         'id_sample_tmp',
-#         'id_iseq_flowcell_tmp', 
-#         'qc',
-# #        'id_product',
-#     ]
-
-#     logging.info('refining dataframe')
-#     # N.B., 'Int64' allows for missing values in pandas > 0.24
-#     df = df.astype({k: 'Int64' for k in int_cols})

@@ -88,25 +88,22 @@ def view_alignment(aln, aln_view_fn, fontsize="9pt", plot_width=1200):
     p = gridplot([[p],[p1]], toolbar_location='below')
     save(p)
 
-def plot_plate_view(df, fname, target, reference, title=None):
+def plot_plate_view(df, fname, target, reference_path, title=None):
 
     """
     Plots a plate map for a given plate and Plasmodium type.
 
-    Parameters:
-    df (pandas.DataFrame): The DataFrame to plot.
-    P (str): The Plasmodium type to plot the total reads for.
-    title (str): The title for the plot. Default is None.
-    plate (str): The name of the plate. Default is None.
-    annot (bool): Whether to annotate the heatmap with the values. Default is True.
-    cmap (str): The color map to use for the heatmap. Default is 'coolwarm'.
-    center (float): The center value for the color map. Default is None.
+    Args:
+    - df (pandas.DataFrame): The DataFrame to plot.
+    - fname (str): The name of the file to save the plot to
+    - target (str): The name of the target (e.g. 'P1', 'P2').
+    - reference_path (str): The path to the reference directory
+    - title (str): The title for the plot. Default is None.
 
     Returns:
     None.
     """
 
- 
     # set the output filename
     output_file(fname)
 
@@ -137,11 +134,11 @@ def plot_plate_view(df, fname, target, reference, title=None):
         p.renderers.extend([hline])
 
     #load colors
-    if not os.path.isfile(f'{reference}/species_colours.csv'):
+    if not os.path.isfile(f'{reference_path}/species_colours.csv'):
         logging.warning('No colors defined for plotting.')
         cmap = {}
     else:
-        colors = pd.read_csv(f'{reference}/species_colours.csv')
+        colors = pd.read_csv(f'{reference_path}/species_colours.csv')
         cmap = dict(zip(colors['species'], colors['color']))
 
     # Assign grey color to data with more than one species
