@@ -161,7 +161,7 @@ def prep_samples(samples_fn):
             }), 
             inplace=True)
     elif samples_fn.endswith('tsv'):
-        logging.info(f'preparing sample manifest from new file {samples_fn}')
+        logging.info(f'preparing sample manifest from new style file {samples_fn}')
         samples_df = pd.read_csv(samples_fn, sep='\t', dtype='str')
         samples_df.rename(columns=({'derived_sample_id':'sample_id'}), inplace=True)
         assert samples_df.irods_path.str.match('/seq/\d{5}/\d{5}_\d#\d+.cram').all()

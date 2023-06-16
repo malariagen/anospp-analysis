@@ -33,7 +33,7 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     hap_df = hap_df.astype({'target': str})
     filtered_hap_df = hap_df[(hap_df.reads>=int(rc_threshold)) & (hap_df.reads_fraction>=float(rf_threshold))]
     if filtered_hap_df.shape[0] < hap_df.shape[0]:
-        logging.warning(f'removed {hap_df.shape[0] - filtered_hap_df.shape[0]} haplotypes'
+        logging.warning(f'removed {hap_df.shape[0] - filtered_hap_df.shape[0]} haplotypes '
                         f'with fewer than {rc_threshold} reads or lower fracion than {rf_threshold} of reads')
     mosq_hap_df = filtered_hap_df[filtered_hap_df.target.isin(MOSQ_TARGETS)]
     mosq_hap_df = mosq_hap_df.astype({'target': int})
