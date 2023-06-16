@@ -83,12 +83,14 @@ def get_hap_df(dada_table, demult_dir):
             id_vars=['dada2_id','sequence','target','trimmed_sequence'],
             var_name='sample_id',
             value_name='reads')
-    hap_df = hap_df[hap_df.reads > 0].copy()
     hap_df['target'] = hap_df.target.astype(str)
     hap_df.rename(columns={
         'sequence':'untrimmed_sequence',
         'trimmed_sequence':'consensus'
     }, inplace=True)
+    # collapse identical sequences
+    hap_df = hap_df.groupby(['sample_id','target','consensus'])['reads'].sum().reset_index()
+    hap_df = hap_df.query('reads > 0')
 
     return hap_df
 
@@ -114,7 +116,7 @@ def prep_dada2(args):
 def main():
     
     parser = argparse.ArgumentParser("Convert DADA2 output to ANOSPP haplotypes tsv")
-    parser.add_argument('-t', '--dada_table', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-t', '--dada_table', help='DADA2 table tsv file', required=True)
     parser.add_argument('-a', '--adapters', help='adapters fasta file for deplexing with cutadapt', required=True)
     parser.add_argument('-o', '--out_haps', help='output haplotypes tsv file. Default: haps.tsv', default='haps.tsv')
     parser.add_argument('-w', '--work_dir', help='working directory for intermediate files. Default: work',
