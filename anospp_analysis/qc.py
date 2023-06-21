@@ -257,7 +257,7 @@ def qc(args):
         logging.info('only ANOSPP targets detected, plotting ANOSPP QC')
     else:
         anospp = False
-        logging.info('non-ANOSPP targets detected, plotting generic QC')
+        logging.warning('non-ANOSPP targets detected, plotting generic QC')
 
     fig, _ = plot_target_balance(hap_df)
     fig.savefig(f'{args.outdir}/target_balance.png')
