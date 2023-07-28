@@ -311,5 +311,6 @@ def combine_stats(stats_df, hap_df, samples_df):
         .groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
     comb_stats_df['raw_multiallelic_mosq_targets'] = comb_stats_df['raw_multiallelic_mosq_targets'].fillna(0)
     comb_stats_df.reset_index(inplace=True)
+    comb_stats_df.sort_values(by='tag_index', inplace=True)
         
     return comb_stats_df
