@@ -25,6 +25,7 @@ def plot_target_balance(hap_df):
     ax.get_legend().remove()
     ax.set_ylabel('reads (log10)')
     ax.set_xlabel('target')
+    ax.axhline(1, c='silver', alpha=.5)
     ax.tick_params(axis='x', rotation=90)
     plt.tight_layout()
 
@@ -41,6 +42,8 @@ def plot_allele_balance(hap_df):
         kind="hex", height=8)
     het_plot.ax_joint.set_ylabel('reads (log10)')
     het_plot.ax_joint.set_xlabel('allele fraction')
+    het_plot.ax_joint.axhline(1, c='silver', alpha=.5)
+    het_plot.ax_joint.axvline(0.1, c='silver', alpha=.5)
     
     return het_plot
 
@@ -107,6 +110,7 @@ def plot_sample_filtering(comb_stats_df):
         ax.tick_params(axis='x', rotation=90)
         ax.set_ylabel('reads (log10)')
         ax.legend(loc='upper left')
+        ax.set_title(plate)
     plt.tight_layout()
 
     return fig, axs
@@ -126,7 +130,7 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
                 jitter=.35,
                 ax=axs[0])
     # 1000 reads cutoff
-    axs[0].axhline(3, c='silver')
+    axs[0].axhline(3, c='silver', alpha=.5)
     axs[0].set_xticklabels([])
     sns.stripplot(data=comb_stats_df,
                 y='targets_recovered',
@@ -136,7 +140,7 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
                 jitter=.35,
                 ax=axs[1])
     # 30 targets cutoff
-    axs[1].axhline(30, c='silver')
+    axs[1].axhline(30, c='silver', alpha=.5)
     axs[1].set_xticklabels([])
     sns.stripplot(data=comb_stats_df,
                 y='filter_rate',
@@ -146,7 +150,7 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
                 jitter=.35,
                 ax=axs[2])
     # 50% filtering cutoff
-    axs[2].axhline(.5, c='silver')
+    axs[2].axhline(.5, c='silver', alpha=.5)
     for ax in axs:
         ax.get_legend().remove()
     plt.xticks(rotation=90)
@@ -193,12 +197,32 @@ def plot_sample_success(comb_stats_df, anospp=True):
                 hue='plate_id',
                 alpha=.5, 
                 ax=ax)
-        ax.axvline(30, alpha=.5)
-    axs[0].axhline(3, alpha=.5)
-    axs[1].axhline(.5, alpha=.5)
+        ax.axvline(30, c='silver', alpha=.5)
+    axs[0].axhline(3, c='silver', alpha=.5)
+    axs[1].axhline(.5, c='silver', alpha=.5)
     axs[1].get_legend().remove()
 
     return fig, axs
+
+def plot_plasm_balance(comb_stats_df):
+
+    logging.info('plotting Plasmodium read balance')
+
+    max_p_log = max(comb_stats_df.P1_log10_reads.max(), 
+                    comb_stats_df.P2_log10_reads.max())
+
+    fig, ax = plt.subplots(1,1,figsize=(5,5))
+    sns.scatterplot(data=comb_stats_df,
+                    x='P1_log10_reads',
+                    y='P2_log10_reads',
+                    hue='plate_id',
+                    alpha=.5, 
+                    ax=ax)
+    ax.axhline(1, c='silver', alpha=.5)
+    ax.axvline(1, c='silver', alpha=.5)
+    ax.plot([-1, max_p_log], [-1, max_p_log], color='silver', linestyle='dashed', alpha=.5)
+
+    return fig, ax
 
 def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, **heatmap_kwargs):
 
@@ -283,6 +307,10 @@ def qc(args):
 
     fig, _ = plot_sample_success(comb_stats_df, anospp=anospp)
     fig.savefig(f'{args.outdir}/sample_success.png')
+
+    if anospp:
+        fig, _ = plot_plasm_balance(comb_stats_df)
+        fig.savefig(f'{args.outdir}/plasm_balance.png')
 
     heatmap_kwargs = {
         'center':None,
