@@ -279,8 +279,11 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
     elif target == 'P2':
         combuids = {cons: f"X2-{i}" for tgt, group in df.groupby(['target']) for i, cons in enumerate(group['consensus'].unique())}
     
+
     df['combUIDx'] = df['consensus'].astype(str).replace(combuids)
     df['blast_id'] = df.index.astype(str) + "." + df['combUIDx'].astype(str)
+
+
 
 
     #convert the dataframe to fasta and run blast
@@ -300,11 +303,15 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
     blastdb = f'{path_to_refversion}/{reference_version}/plasmomito_P1P2_DB'
 
 
-    # Run blast and capture the output
-    cmd = f"blastn -db {blastdb} \
-    -query {workdir}/comb_{target}_hap.fasta -out {workdir}/comb_{target}_hap.tsv -outfmt 6 \
-    -word_size 5 -max_target_seqs 1 -evalue 0.01"
-    process = subprocess.run(cmd.split(), capture_output=True, text=True)
+    # #Run blast and capture the output
+    cmd = (
+    f"blastn -db {blastdb} "
+    f"-query {workdir}/comb_{target}_hap.fasta "
+    f"-out {workdir}/comb_{target}_hap.tsv "
+    f"-outfmt '6 qseqid sseqid slen qstart qend length mismatch gapopen gaps sseq, pident evalue bitscore qcovs' "
+    f"-word_size 5 -max_target_seqs 1 -evalue 0.01"
+        )
+    process = subprocess.run(cmd, capture_output=True, text=True, shell=True)
 
     # Handle errors
     if process.returncode != 0:
@@ -313,8 +320,9 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
         sys.exit(1)
     
     #Merge the blast results with the hap data and add additional columns
-    blast_df = pd.read_csv(f'{workdir}/comb_{target}_hap.tsv', sep='\t', names=['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 
-                                                                               'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore'])
+    blast_df = pd.read_csv(f'{workdir}/comb_{target}_hap.tsv', sep='\t', names=['qseqid', 'sseqid', 'slen', 'qstart', 'qend', 'length', 'mismatch',
+                                                                                'gapopen', 'gaps', 'pident', 'evalue', 'bitscore', 'qcovs'])
+
 
     df = pd.merge(df.reset_index(), blast_df, how='right', left_on='blast_id', right_on='qseqid')
     df['genus'] = df.sseqid.str.split('_').str.get(0)
@@ -325,8 +333,8 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
     #subset the dataframe to only the needed columns
     blast_df = df[[
         'sample_id','target', 'reads', 'total_reads', 'reads_fraction', 'consensus',
-        f'ref_id_{target}', 'combUID', 'combUIDx', 'length','pident']].copy()
-    blast_df['hap_id'] = df.apply(lambda x: x.combUID if x.pident == 100 else x.combUIDx, axis=1)
+        f'ref_id_{target}', 'combUID', 'combUIDx', 'length', 'pident']].copy()
+    blast_df['hap_id'] = df.apply(lambda x: x.combUID if x.pident == 100 and x.qcovs == 100 else x.combUIDx, axis=1)
 
     return blast_df
 
@@ -566,10 +574,10 @@ def process_results(haps_merged_df, hard_filters, workdir, outdir):
     # read the combined results summary results
     df = pd.read_csv(f'{workdir}/combined_results_summary.tsv', sep='\t').set_index('sample_id')
 
-
     #create columns for fixing the read IDs
     for col in haps_merged_df['target'].unique():
         df[f'reads_{col}_name'] = df[f'ref_id_{col}'].apply(lambda d: d.strip('][').split(', ') if isinstance(d, str) else '')
+        # df[f'reads_{col}_name'] = df[f'reads_{col}_name'].apply(uniques)
         df[f'reads_{col}_fixed'] = df[f'reads_{col}'].apply(lambda d: d.strip('][').split(', ') if isinstance(d, str) else [0])
         df[f'pident_{col}_fixed'] = df[f'pident_{col}'].apply(lambda d: d.strip('][').split(', ') if isinstance(d, str) else [0])
 
@@ -583,6 +591,7 @@ def process_results(haps_merged_df, hard_filters, workdir, outdir):
     #compute concordance and species
     reads_cols = [col for col in ['reads_P1_name', 'reads_P2_name'] if col in df.columns]
     df['concordance'] = df[reads_cols].apply(uniques, axis=1).map(list)
+
 
     #spread out the plasmodium id
     df_all = pd.merge(df, pd.DataFrame(df['concordance'].values.tolist()).add_prefix('plasmodium_id_'), on=df.index)
@@ -600,7 +609,8 @@ def process_results(haps_merged_df, hard_filters, workdir, outdir):
     # Create Plasmodium status categories
     df_all['plasmodium_status'] = 'inconclusive'
     if 'P1_min' in df_all.columns and 'P2_min' in df_all.columns:
-        df_all.loc[(df_all['P1_min'] >= int(filter_p1)) & (df_all['P2_min'] >= int(filter_p2)), 'plasmodium_status'] = 'consistent'
+        df_all.loc[(df_all['P1_min'] >= int(filter_p1)) & (df_all['P2_min'] >= int(filter_p2)) &
+                   (df_all['reads_P1_name'].apply(uniques) == df_all['reads_P2_name'].apply(uniques)), 'plasmodium_status'] = 'consistent'
         df_all.loc[(df_all['P1_min'] == 0) & (df_all['P2_min'] >= int(filter_p2)), 'plasmodium_status'] = 'P2 only'
         df_all.loc[(df_all['P1_min'] >= int(filter_p1)) & (df_all['P2_min'] == 0), 'plasmodium_status'] = 'P1 only'
 
@@ -645,19 +655,37 @@ def process_results(haps_merged_df, hard_filters, workdir, outdir):
     for col in haps_merged_df['target'].unique():
         df_all[f'hap_ID_{col}'] = df_all[f'hap_ID_{col}'].astype(str).str.replace(r'\[|\]|"', '', regex=True)
         df_all[f'hap_ID_{col}'] = df_all[f'hap_ID_{col}'].astype(str).str.replace(r"'", "")
-        df_all[f'hap_ID_{col}'] = df_all[f'hap_ID_{col}'].astype(str).str.replace(r",", "\n")
+
+        df_all[f'pident_{col}'] = df_all[f'pident_{col}'].astype(str).str.replace(r'\[|\]|"', '', regex=True)
+        df_all[f'pident_{col}'] = (df_all[f'pident_{col}'].astype(str).str.replace(r"'", ""))
+
+        df_all[f'reads_{col}'] = df_all[f'reads_{col}'].astype(str).str.replace(r'\[|\]|"', '', regex=True)
+        df_all[f'reads_{col}'] = (df_all[f'reads_{col}'].astype(str).str.replace(r"'", ""))
+
+
+        # df_all[f'hap_ID_{col}'] = df_all[f'hap_ID_{col}'].astype(str).str.replace(r",", "\n")
 
 
     # Filter useful columns and save the results
     cols_to_keep = ['plate_id', 'plasmodium_species', 'plasmodium_status', 'species_count']
-    if 'hap_ID_P1' in df_all.columns:
-        cols_to_keep += ['hap_ID_P1', 'hap_count_P1', 'total_reads_P1']
-    if 'hap_ID_P2' in df_all.columns:
-        cols_to_keep += ['hap_ID_P2', 'hap_count_P2', 'total_reads_P2']                   
+    # if 'hap_ID_P1' in df_all.columns:
+    if 'hap_ID_P1' in df_all.columns and 'pident_P1' in df_all.columns and 'reads_P1' in df_all.columns:
+        cols_to_keep += ['hap_count_P1', 'total_reads_P1', 'hap_ID_P1', 'pident_P1', 'reads_P1']
+    # if 'hap_ID_P2' in df_all.columns:
+    if 'hap_ID_P2' in df_all.columns and 'pident_P2' in df_all.columns and 'reads_P2' in df_all.columns:
+        cols_to_keep += ['hap_count_P2', 'total_reads_P2', 'hap_ID_P2', 'pident_P2', 'reads_P2']                   
     if 'sample_supplier_name' in df_all.columns:
         cols_to_keep.insert(0, 'sample_supplier_name')
-    cols_to_keep += ['new_haplotype', 'P1_P2_consistency']
+    # cols_to_keep += ['new_haplotype', 'P1_P2_consistency']
     df_all_final = df_all[cols_to_keep]
+
+    # Replace 'nan' with '' in 'pident_' and 'reads_' columns if they exist
+    for col in haps_merged_df['target'].unique():
+        if f'pident_{col}' in df_all_final.columns:
+            df_all_final[f'pident_{col}'] = df_all_final[f'pident_{col}'].fillna('')
+
+        if f'reads_{col}' in df_all_final.columns:
+            df_all_final[f'reads_{col}'] = df_all_final[f'reads_{col}'].fillna('')
 
     df_all_final.to_csv(f'{outdir}/plasmodium_predictions.tsv', sep='\t')
 
@@ -716,8 +744,6 @@ def generate_plots(meta_df_all, haps_merged_df, outdir, path_to_refversion, refe
 
     # Make the bar plots
     plot_bar(meta_df_all, reference_path, f'{outdir}/bar_plots.png')
-
-
 
 def generate_stats(samples_df, haps_merged_df, merged_hap_df, df_all, outdir):
 
@@ -796,7 +822,6 @@ def plasm(args):
     logging.info('preparing input data and variables')
     stats_df = prep_stats(args.stats)
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-    # haps_merged_df = hard_filter_haplotypes(hap_df, args.filter_p1, args.filter_p2)
     haps_merged_df = hard_filter_haplotypes(hap_df, args.hard_filters)
 
     # Check for presence of PLASM_TARGETS

@@ -110,6 +110,7 @@ def plot_plate_view(df, fname, target, reference_path, title=None):
     #extract the column and generate the row values
     cols = list(map(str, sorted(df.lims_row.unique().tolist())))
     rows = [str(x) for x in range(1, 25)]
+    df = df.reset_index(drop=False)
     df["species_count"] = df["species_count"].astype(str)
     df["row"] = df["lims_col"].astype(str)
     df["col"] = df["lims_row"].astype(str)
@@ -163,7 +164,7 @@ def plot_plate_view(df, fname, target, reference_path, title=None):
 
     #set up the hover value
     p.add_tools(HoverTool(tooltips=[
-        ("sample id", "@{Source_sample}"),
+        ("sample id", "@{sample_id}"),
         ("Parasite species", "@plasmodium_species"),
         ("Detection confidence", "@plasmodium_status"),
         ("P1 & P2 consistency", "@P1_P2_consistency"),

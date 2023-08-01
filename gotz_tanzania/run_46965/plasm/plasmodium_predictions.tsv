@@ -1,27 +1,27 @@
 sample_id	sample_supplier_name	plate_id	plasmodium_species	plasmodium_status	species_count	hap_ID_P1	hap_count_P1	total_reads_P1	hap_ID_P2	hap_count_P2	total_reads_P2	new_haplotype	P1_P2_consistency
-ANOSPP13621588	GOTZ_001_F2	p_46965_1	Plasmodium_falciparum	contradictory	1	"F1-0
+ANOSPP13621588	GOTZ_001_F2	p_46965_1	Plasmodium_falciparum	P1 only	1	"P1-0
  X1-1"	2.0	97.0				YES	NO
-ANOSPP13621646	GOTZ_001_H9	p_46965_1	Plasmodium_falciparum	contradictory	1	F1-0	1.0	39.0				NO	NO
-ANOSPP13621762	GOTZ_002_D12	p_46965_3	Plasmodium_falciparum	contradictory	1	X1-2	1.0	51.0				YES	NO
-ANOSPP13621853	GOTZ_003_G11	p_46965_2	Plasmodium_falciparum	consistent	1	F1-0	1.0	487.0	F2-0	1.0	8106.0	NO	YES
-ANOSPP13621949	GOTZ_004_G11	p_46965_4	Plasmodium_falciparum	contradictory	1	"F1-0
- F1-1"	2.0	181.0				NO	NO
-ANOSPP13621990	GOTZ_005_H4	p_46965_5	Plasmodium_falciparum	consistent	1	F1-0	1.0	17.0	F2-1	1.0	31.0	NO	YES
-ANOSPP13622096	GOTZ_006_B6	p_46965_7	Plasmodium_falciparum	contradictory	1	"F1-0
+ANOSPP13621646	GOTZ_001_H9	p_46965_1	Plasmodium_falciparum	P1 only	1	P1-0	1.0	39.0				NO	NO
+ANOSPP13621762	GOTZ_002_D12	p_46965_3	Plasmodium_falciparum	P1 only	1	X1-2	1.0	51.0				YES	NO
+ANOSPP13621853	GOTZ_003_G11	p_46965_2	Plasmodium_falciparum	consistent	1	P1-0	1.0	487.0	P2-0	1.0	8106.0	NO	YES
+ANOSPP13621949	GOTZ_004_G11	p_46965_4	Plasmodium_falciparum	P1 only	1	"P1-0
+ P1-2"	2.0	181.0				NO	NO
+ANOSPP13621990	GOTZ_005_H4	p_46965_5	Plasmodium_falciparum	consistent	1	P1-0	1.0	17.0	P2-1	1.0	31.0	NO	YES
+ANOSPP13622096	GOTZ_006_B6	p_46965_7	Plasmodium_falciparum	P1 only	1	"P1-0
  X1-4"	2.0	160.0				YES	NO
-ANOSPP13622112	GOTZ_006_B8	p_46965_7	Plasmodium_falciparum	consistent	1	"F1-0
- X1-5"	2.0	128.0	"F2-1
+ANOSPP13622112	GOTZ_006_B8	p_46965_7	Plasmodium_falciparum	consistent	1	"P1-0
+ X1-5"	2.0	128.0	"P2-1
  X2-3
- F2-0"	3.0	384.0	YES	YES
-ANOSPP13622139	GOTZ_006_E11	p_46965_7	Plasmodium_falciparum	consistent	1	F1-0	1.0	149.0	F2-0	1.0	2600.0	NO	YES
-ANOSPP13622213	GOTZ_007_G8	p_46965_6	Plasmodium_falciparum	contradictory	1	X1-6	1.0	69.0				YES	NO
-ANOSPP13622244	GOTZ_007_F12	p_46965_6	Plasmodium_falciparum	contradictory	1	F1-0	1.0	61.0				NO	NO
-ANOSPP13622254	GOTZ_008_H1	p_46965_8	Plasmodium_reichenowi	contradictory	1	X1-7	1.0	47.0				YES	NO
-ANOSPP13622280	GOTZ_008_B5	p_46965_8	Plasmodium_reichenowi	contradictory	1	U1-0	1.0	45.0				NO	NO
-ANOSPP13622328	GOTZ_008_B11	p_46965_8	Plasmodium_falciparum	consistent	1	F1-0	1.0	15.0	F2-0	1.0	43.0	NO	YES
-ANOSPP13622336	GOTZ_008_B12	p_46965_8	Plasmodium_malariae	consistent	1	M1-0	1.0	33.0	M2-0	1.0	51.0	NO	YES
-ANOSPP13621914	GOTZ_004_D7	p_46965_4	Plasmodium_falciparum	low_infection	1				X2-1	1.0	37.0	YES	NO
-ANOSPP13622006	GOTZ_005_H6	p_46965_5	Plasmodium_falciparum	low_infection	1				F2-0	1.0	54.0	NO	NO
-ANOSPP13622098	GOTZ_006_D6	p_46965_7	Plasmodium_falciparum	low_infection	1				F2-0	1.0	57.0	NO	NO
-ANOSPP13622335	GOTZ_008_A12	p_46965_8	Plasmodium_falciparum	low_infection	1				"F2-1
- F2-0"	2.0	140.0	NO	NO
+ P2-0"	3.0	384.0	YES	YES
+ANOSPP13622139	GOTZ_006_E11	p_46965_7	Plasmodium_falciparum	consistent	1	P1-0	1.0	149.0	P2-0	1.0	2600.0	NO	YES
+ANOSPP13622213	GOTZ_007_G8	p_46965_6	Plasmodium_falciparum	P1 only	1	X1-6	1.0	69.0				YES	NO
+ANOSPP13622244	GOTZ_007_F12	p_46965_6	Plasmodium_falciparum	P1 only	1	P1-0	1.0	61.0				NO	NO
+ANOSPP13622254	GOTZ_008_H1	p_46965_8	Plasmodium_falciparum	P1 only	1	X1-7	1.0	47.0				YES	NO
+ANOSPP13622280	GOTZ_008_B5	p_46965_8	Plasmodium_falciparum	P1 only	1	P1-1	1.0	45.0				NO	NO
+ANOSPP13622328	GOTZ_008_B11	p_46965_8	Plasmodium_falciparum	consistent	1	P1-0	1.0	15.0	P2-0	1.0	43.0	NO	YES
+ANOSPP13622336	GOTZ_008_B12	p_46965_8	Plasmodium_malariae	consistent	1	P1-22	1.0	33.0	P2-54	1.0	51.0	NO	YES
+ANOSPP13621914	GOTZ_004_D7	p_46965_4	Plasmodium_falciparum	P2 only	1				X2-1	1.0	37.0	YES	NO
+ANOSPP13622006	GOTZ_005_H6	p_46965_5	Plasmodium_falciparum	P2 only	1				P2-0	1.0	54.0	NO	NO
+ANOSPP13622098	GOTZ_006_D6	p_46965_7	Plasmodium_falciparum	P2 only	1				P2-0	1.0	57.0	NO	NO
+ANOSPP13622335	GOTZ_008_A12	p_46965_8	Plasmodium_falciparum	P2 only	1				"P2-1
+ P2-0"	2.0	140.0	NO	NO
