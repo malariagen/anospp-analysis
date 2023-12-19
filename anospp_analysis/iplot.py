@@ -166,8 +166,7 @@ def plot_plate_view(df, fname, target, reference_path, title=None):
     p.add_tools(HoverTool(tooltips=[
         ("sample id", "@{sample_id}"),
         ("Parasite species", "@plasmodium_species"),
-        ("Detection confidence", "@plasmodium_status"),
-        ("P1 & P2 consistency", "@P1_P2_consistency"),
+        ("Detection status", "@plasmodium_status"),
         ("P1 haplotype ID", "@hap_ID_P1"),
         ("Total P1 read count", "@total_reads_P1"),
         ("P2 haplotype ID", "@hap_ID_P2"),
