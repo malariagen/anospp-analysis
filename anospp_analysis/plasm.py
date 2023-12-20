@@ -1,4 +1,3 @@
-#!/usr/bin/python
 
 import argparse
 import os
@@ -15,6 +14,7 @@ import warnings
 
 from .util import *
 from .iplot import plot_plate_view
+
 
 
 def plot_lims_plate(df, target, plate, fname, annot=True, cmap='coolwarm', title=None, center=None):
@@ -282,31 +282,29 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
 
     logging.info(f'running blast for {target}')
     
-    #filter the hapdata to the current targe
+    # Filter the hapdata to the current targe
     hap_data = hap_data[hap_data['target'] == target]
     df = hap_data[['sample_id', 'target', 'reads', 'total_reads', 'reads_fraction', 'consensus']].copy().set_index('sample_id')
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=FutureWarning)
         if target == 'P1':
-            # combuids = {cons: f"X1-{i}" for tgt, group in df.groupby(['target']) for i, cons in enumerate(group['consensus'].unique())}
             combuids = {cons: f"X1-{i}" for tgt, group in df.groupby(['target']) for i, cons in enumerate(group['consensus'].unique())}
 
         elif target == 'P2':
-            # combuids = {cons: f"X2-{i}" for tgt, group in df.groupby(['target']) for i, cons in enumerate(group['consensus'].unique())}
             combuids = {cons: f"X2-{i}" for tgt, group in df.groupby(['target']) for i, cons in enumerate(group['consensus'].unique())}
     
-    #add the combIDx and blast_id columns to the dataframe
+    # Add the combIDx and blast_id columns to the dataframe
     df['combUIDx'] = df['consensus'].astype(str).replace(combuids)
     df['blast_id'] = df.index.astype(str) + "." + df['combUIDx'].astype(str)
 
-    #convert the dataframe to fasta and run blast
+    # Convert the dataframe to fasta and run blast
     with open(f"{workdir}/comb_{target}_hap.fasta", "w") as output:
         for index, row in df.iterrows():
             output.write(">"+ index + "." + str(row['combUIDx'])+ "\n")
             output.write(row['consensus'] + "\n")
 
-    #load the blast db from the reference path
+    # Load the blast db from the reference path
     reference_path = f'{path_to_refversion}/{reference_version}/'
 
     assert os.path.isdir(reference_path), f'reference version {reference_version} does not exist at {reference_path}'
@@ -316,7 +314,7 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
     
     blastdb = f'{path_to_refversion}/{reference_version}/plasmomito_P1P2_DB'
 
-    # #Run blast and capture the output
+    # Run blast and capture the output
     cmd = (
     f"blastn -db {blastdb} "
     f"-query {workdir}/comb_{target}_hap.fasta "
@@ -332,7 +330,7 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
         logging.error(f"Command error: {process.stderr}")
         sys.exit(1)
     
-    #Merge the blast results with the hap data and add additional columns
+    # Merge the blast results with the hap data and add additional columns
     blast_df = pd.read_csv(f'{workdir}/comb_{target}_hap.tsv', sep='\t', names=['qseqid', 'sseqid', 'slen', 'qstart', 'qend', 'length', 'mismatch',
                                                                                 'gapopen', 'gaps', 'pident', 'evalue', 'bitscore', 'qcovs'])
 
@@ -343,12 +341,12 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
     df[f'ref_id_{target}'] = df['genus'] + '_' + df['specie']
     df['combUID'] = df.sseqid.str.split(':').str.get(1)
 
-    #subset the dataframe to only the needed columns
+    # Subset the dataframe to only the needed columns
     blast_df = df[[
         'sample_id','target', 'reads', 'total_reads', 'reads_fraction', 'consensus',
         f'ref_id_{target}', 'combUID', 'combUIDx', 'length', 'pident', 'qcovs']].copy()
     
-    #this line deals with a bug arising from an insufficiently long P. malariae reference sequence
+    # This line deals with a bug arising from an insufficiently long P. malariae reference sequence
     blast_df['hap_id'] = df.apply(lambda x: x.combUID if x.pident == 100 and ((x.combUID.startswith('M') and x.qcovs>=96) or (x.qcovs == 100)) else x.combUIDx, axis=1)
 
     return blast_df
@@ -414,14 +412,14 @@ def haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_filt_df, w
 
     logging.info(f'determining the haplotype diversity for {target}')
 
-    # #filter the input data to the current target
+    # Filter the input data to the current target
     hap_df_filt = hap_df[hap_df['target'] == target]
 
-    #create the haplotype sequence dataframe
+    # Create the haplotype sequence dataframe
     haps_df = create_hap_data(hap_df_filt)
     hap_seq_df = pd.DataFrame({'haplotypes' :new_cols, 'sequences': haps_df.columns})
 
-    #create a new haplotype dataframe with haplotyes, total reads and sample_count columns
+    # Create a new haplotype dataframe with haplotyes, total reads and sample_count columns
     hap_df_filt.set_index('sample_id', inplace=True)
     haplotypes = haplotype_df.columns[len(hap_df_filt.columns): ]
     total_reads = haplotype_df.iloc[-2, len(hap_df_filt.columns): ]
@@ -435,7 +433,7 @@ def haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_filt_df, w
     merged_hap_df[['Total reads', 'Sample_count']] = merged_hap_df[['Total reads', 'Sample_count']].apply(
         lambda x: pd.to_numeric(x, errors='coerce').astype('Int64'))
 
-    #Add the combUIDs to the above dataframe
+    # Add the combUIDs to the above dataframe
     merged_hap_df_blast = blast_filt_df[['consensus', 'hap_id', f'ref_id_{target}']].copy()
     merged_hap_df_blast.drop_duplicates(subset=['consensus', 'hap_id'], inplace=True)
 
@@ -492,7 +490,7 @@ def generate_haplotype_tree(target, hap_div_df, workdir, outdir, interactive_plo
     fig.savefig(f'{outdir}/haps_{target}_mafft.png')
     plt.close(fig)
 
-    #View and save the Alignment using bokeh
+    # View and save the Alignment using bokeh
     if interactive_plotting:
 
         from .iplot import view_alignment
@@ -636,7 +634,7 @@ def process_results(haps_merged_df, hard_filters, workdir, outdir):
     df_all["plasmodium_species"] = df_all.filter(regex="^plasmodium_id_").apply(lambda x: ", ".join(sorted(filter(lambda y: pd.notnull(y) and y != "", x))), axis=1)
     df_all["plasmodium_species"] = df_all["plasmodium_species"].str.replace("'", "")
 
-    #count the number of species per sample
+    # Count the number of species per sample
     df_all['species_count'] = df['concordance'].apply(len)
 
     # Create Plasmodium status categories
@@ -663,19 +661,19 @@ def process_results(haps_merged_df, hard_filters, workdir, outdir):
         df_all['P1_P2_consistency'] = 'NO'
     
     # Create column for new haplotypes found
-    # check if both P1_min_pident and P2_min_pident are present in the dataframe
+    # Check if both P1_min_pident and P2_min_pident are present in the dataframe
     if all(col in df_all.columns for col in ['P1_min_pident', 'P2_min_pident']):
         df_all['new_haplotype'] = np.where(
             ((df_all['P1_min_pident'].fillna(-1) < 100) & (df_all['P1_min_pident'].fillna(0) != 0)) |
             ((df_all['P2_min_pident'].fillna(-1) < 100) & (df_all['P2_min_pident'].fillna(0) != 0)),
             'YES', 'NO')
         
-    # check if only P1_min_pident is present in the dataframe
+    # Check if only P1_min_pident is present in the dataframe
     elif 'P1_min_pident' in df_all.columns:
         df_all['new_haplotype'] = np.where(
             (df_all['P1_min_pident'].fillna(-1) < 100) & (df_all['P1_min_pident'].fillna(0) != 0), 'YES', 'NO')
     
-    # check if only P1_min_pident is present in the dataframe
+    # Check if only P1_min_pident is present in the dataframe
     elif 'P2_min_pident' in df_all.columns:
         df_all['new_haplotype'] = np.where(
             df_all['P2_min_pident'].fillna(-1) < 100 & (df_all['P2_min_pident'].fillna(0) != 0), 'YES', 'NO') 
@@ -712,11 +710,9 @@ def process_results(haps_merged_df, hard_filters, workdir, outdir):
     # Replace 'nan' with '' in 'pident_' and 'reads_' columns if they exist
     for col in haps_merged_df['target'].unique():
         if f'pident_{col}' in df_all_final.columns:
-            # df_all_final[f'pident_{col}'] = df_all_final[f'pident_{col}'].fillna('')
             df_all_final.loc[:, f'pident_{col}'] = df_all_final[f'pident_{col}'].fillna('')
 
         if f'reads_{col}' in df_all_final.columns:
-            # df_all_final[f'reads_{col}'] = df_all_final[f'reads_{col}'].fillna('')
             df_all_final.loc[:, f'reads_{col}'] = df_all_final[f'reads_{col}'].fillna('')
 
     df_all_final.to_csv(f'{outdir}/plasmodium_predictions.tsv', sep='\t')
@@ -869,44 +865,44 @@ def plasm(args):
         logging.warning('Could not find both PLASM_TARGETS in hap_df')
         sys.exit(1)
 
-    else:
-        try:
-            # Run BLAST and create haplotype tree for each target
-            logging.info('running blast')
-            df_list = []
-            hap_output = []
-            for target in haps_merged_df['target'].unique():          
-                haplotype_df, new_cols = haplotype_summary(hap_df, target, args.workdir)
-                blast_df = run_blast(haps_merged_df, target, args.workdir, args.path_to_refversion, args.reference_version)
-                blast_filt_df = filter_blast(blast_df, target, args.soft_filters, args.filter_falciparum)
-                hap_div_df = haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_filt_df, args.workdir)
-                generate_haplotype_tree(target, hap_div_df, args.workdir, args.outdir, args.interactive_plotting)
-                per_read_summary = create_per_read_summary(blast_filt_df, target, args.workdir)
-                df_list.append(per_read_summary)
-                hap_output.append(blast_filt_df)
 
-            # Combine blast results and create merged dataframe for all targets
-            logging.info('merging blast summary outputs')
-            merged_df = pd.concat(df_list, axis=1)
-            merge_and_export(samples_df, merged_df, args.workdir)
-            df_all = process_results(haps_merged_df, args.hard_filters, args.workdir, args.outdir)
-            merged_hap_df = pd.concat(hap_output, axis=0)[['sample_id', 'hap_id', 'target', 'consensus', 'reads', 'pident']].copy().set_index('sample_id')
-            merged_hap_df.to_csv(f'{args.outdir}/plasmodium_haplotypes.tsv', sep='\t')
+    try:
+        # Run BLAST and create haplotype tree for each target
+        logging.info('running blast')
+        df_list = []
+        hap_output = []
+        for target in haps_merged_df['target'].unique():          
+            haplotype_df, new_cols = haplotype_summary(hap_df, target, args.workdir)
+            blast_df = run_blast(haps_merged_df, target, args.workdir, args.path_to_refversion, args.reference_version)
+            blast_filt_df = filter_blast(blast_df, target, args.soft_filters, args.filter_falciparum)
+            hap_div_df = haplotype_diversity(haplotype_df, target, new_cols, hap_df, blast_filt_df, args.workdir)
+            generate_haplotype_tree(target, hap_div_df, args.workdir, args.outdir, args.interactive_plotting)
+            per_read_summary = create_per_read_summary(blast_filt_df, target, args.workdir)
+            df_list.append(per_read_summary)
+            hap_output.append(blast_filt_df)
 
-            # generate the summary stats text file
-            generate_stats(samples_df, haps_merged_df, merged_hap_df, df_all, args.outdir)
+        # Combine blast results and create merged dataframe for all targets
+        logging.info('merging blast summary outputs')
+        merged_df = pd.concat(df_list, axis=1)
+        merge_and_export(samples_df, merged_df, args.workdir)
+        df_all = process_results(haps_merged_df, args.hard_filters, args.workdir, args.outdir)
+        merged_hap_df = pd.concat(hap_output, axis=0)[['sample_id', 'hap_id', 'target', 'consensus', 'reads', 'pident']].copy().set_index('sample_id')
+        merged_hap_df.to_csv(f'{args.outdir}/plasmodium_haplotypes.tsv', sep='\t')
 
-            # Merge sample and stats dataframes and generate plots
-            logging.info('merging the samples(meta) dataframe with the stats dataframe and creating plots')
-            meta_df_all = pd.merge(samples_df.set_index('sample_id'), df_all, left_index=True, right_index=True, how='left')
-            generate_plots(meta_df_all, haps_merged_df, args.outdir, args.path_to_refversion, args.reference_version, args.interactive_plotting)
+        # generate the summary stats text file
+        generate_stats(samples_df, haps_merged_df, merged_hap_df, df_all, args.outdir)
 
-        except Exception as e:
-            error_message = f'An error occurred: {e}'
-            logging.error(error_message)
-            raise RuntimeError(error_message)
-        
-        logging.info('ANOSPP plasm complete')
+        # Merge sample and stats dataframes and generate plots
+        logging.info('merging the samples(meta) dataframe with the stats dataframe and creating plots')
+        meta_df_all = pd.merge(samples_df.set_index('sample_id'), df_all, left_index=True, right_index=True, how='left')
+        generate_plots(meta_df_all, haps_merged_df, args.outdir, args.path_to_refversion, args.reference_version, args.interactive_plotting)
+
+    except Exception as e:
+        error_message = f'An error occurred: {e}'
+        logging.error(error_message)
+        raise RuntimeError(error_message)
+    
+    logging.info('ANOSPP plasm complete')
 
 
 def main():
@@ -926,7 +922,6 @@ def main():
         parser = argparse.ArgumentParser("Plasmodium ID assignment for ANOSPP data")
         parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
         parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
-        parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
         parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
                             Default: ref_databases', default='ref_databases')
         parser.add_argument('-r', '--reference_version', help='Reference index version - currently a directory name. \
@@ -954,13 +949,12 @@ def main():
         # Validate and normalize directory paths
         args.haplotypes = os.path.abspath(args.haplotypes)
         args.manifest = os.path.abspath(args.manifest)
-        args.stats = os.path.abspath(args.stats)
         args.path_to_refversion = os.path.abspath(args.path_to_refversion)
         args.outdir = os.path.abspath(args.outdir)
         args.workdir = os.path.abspath(args.workdir)
 
         # Validate input file paths
-        for file_path in [args.haplotypes, args.manifest, args.stats]:
+        for file_path in [args.haplotypes, args.manifest]:
             if not os.path.exists(file_path):
                 error_message = f"Error: File '{file_path}' does not exist."
                 logging.error(error_message)
