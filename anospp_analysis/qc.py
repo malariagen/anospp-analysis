@@ -39,7 +39,7 @@ def plot_allele_balance(hap_df):
     het_frac = hap_df[is_het].reads_fraction
     het_reads_log = hap_df[is_het].reads.apply(lambda x: np.log10(x))
     het_plot = sns.jointplot(x=het_frac, y=het_reads_log, 
-        kind="hex", height=8)
+        kind="hist", height=8)
     het_plot.ax_joint.set_ylabel('reads (log10)')
     het_plot.ax_joint.set_xlabel('allele fraction')
     het_plot.ax_joint.axhline(1, c='silver', alpha=.5)
@@ -339,9 +339,15 @@ def qc(args):
             if col == 'raw_mosq_targets_recovered':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = 62
+            elif col == 'raw_multiallelic_mosq_targets':
+                heatmap_kwargs['vmin'] = 0
+                heatmap_kwargs['vmax'] = max(comb_stats_df[col])
             elif col == 'filter_rate':
                 heatmap_kwargs['vmin'] = 0
-                heatmap_kwargs['vmax'] = 1 
+                heatmap_kwargs['vmax'] = 1
+            elif 'log10' in col: # read counts
+                heatmap_kwargs['vmin'] = -1
+                heatmap_kwargs['vmax'] = max(comb_stats_df[col])
             else:
                 heatmap_kwargs['vmin'] = None
                 heatmap_kwargs['vmax'] = None             
