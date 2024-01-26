@@ -220,6 +220,13 @@ def prep_samples(samples_fn):
     assert ~samples_df.lims_plate_id.isna().any(), 'Could not infer plate_id for all samples'
     assert ~samples_df.lims_well_id.isna().any(), 'Could not infer well_id for all samples'
     assert samples_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
+    
+    # sample_name - short sample id for plotting
+    if 'sanger_sample_id' in samples_df.columns:
+        # works if sanger_sample_id does not contain dashes
+        samples_df['sample_name'] = samples_df['sample_id'].str.rsplit('-', n=1).str.get(0)
+    else:
+        samples_df['sample_name'] = samples_df['sample_id']
 
     return samples_df
 

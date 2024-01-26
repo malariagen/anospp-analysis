@@ -88,6 +88,12 @@ def plot_sample_filtering(comb_stats_df):
     
     logging.info('plotting per-sample filtering barplots')
 
+    # well order for plotting - A1, B1, ...
+    well_order = []
+    for col in range(1,13):
+        for row in 'ABCDEFGH': 
+            well_order.append(f'{row}{col}')
+
     # comb_stats_df colname : legend label
     dada2_cols = OrderedDict([
         ('input','removed by filterAndTrim'), 
@@ -102,14 +108,17 @@ def plot_sample_filtering(comb_stats_df):
     nplates = len(plates)
     fig, axs = plt.subplots(nplates,1,figsize=(20, 4 * nplates))
     for plate, ax in zip(plates, axs):
-        plot_df = comb_stats_df[comb_stats_df.plate_id == plate]
+        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy()
+        plot_df['well_id'] = pd.Categorical(plot_df['well_id'], categories=well_order)
+        plot_df.sort_values(by='well_id', inplace=True)
         for i, col in enumerate(dada2_cols.keys()):
             sns.barplot(x='sample_id',  y=f'{col}_log10', data=plot_df, 
                         color=sns.color_palette()[i], ax=ax, label=dada2_cols[col])
-        ax.set_xlabel('sample_id')
+        ax.set_xticklabels(plot_df['sample_name'])
+        ax.set_xlabel('sample_name')
         ax.tick_params(axis='x', rotation=90)
         ax.set_ylabel('reads (log10)')
-        ax.legend(loc='upper left')
+        ax.legend(loc='upper left', bbox_to_anchor=(1,1))
         ax.set_title(plate)
     plt.tight_layout()
 
@@ -289,9 +298,9 @@ def qc(args):
     fig = plot_allele_balance(hap_df)
     fig.savefig(f'{args.outdir}/allele_balance.png')
 
-    for col in ('nalleles','total_reads'):
-        fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col=col)
-        fig.savefig(f'{args.outdir}/sample_target_{col}.png')
+    # for col in ('nalleles','total_reads'):
+    #     fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col=col)
+    #     fig.savefig(f'{args.outdir}/sample_target_{col}.png')
 
     fig, _ = plot_sample_filtering(comb_stats_df)
     fig.savefig(f'{args.outdir}/filter_per_sample.png')
