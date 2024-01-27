@@ -95,12 +95,14 @@ def plot_sample_filtering(comb_stats_df):
 
     # comb_stats_df colname : legend label
     dada2_cols = OrderedDict([
-        ('input','removed by filterAndTrim'), 
-        ('filtered','removed by denoising'),
-        ('denoised','removed by merging'), 
-        ('merged','removde by rmchimera'), 
-        ('nonchim','removed by post-filtering'),
-        ('final','unassigned to amplicons'),
+        ('total_reads','removed as readthrough'),
+        ('DADA2_input_reads','removed by filterAndTrim'), 
+        ('DADA2_filtered_reads','removed by denoising'),
+        ('DADA2_denoised_reads','removed by merging'), 
+        ('DADA2_merged_reads','removde by rmchimera'), 
+        ('DADA2_nonchim_reads','unassigned to amplicons'),
+        # legacy post-filter disabled in prod
+        # ('DADA2_final_reads','unassigned to amplicons'),
         ('deplexed_reads','Plasmodium reads'),
         ('raw_mosq_reads','mosquito reads')
         ])
@@ -120,7 +122,7 @@ def plot_sample_filtering(comb_stats_df):
         ax.set_xlabel('sample_name')
         ax.tick_params(axis='x', rotation=90)
         ax.set_yscale('log')
-        ax.set_ylim(bottom=0.5, top=max(comb_stats_df['input']))
+        ax.set_ylim(bottom=0.5, top=max(comb_stats_df['total_reads']))
         ax.set_ylabel('reads')
         ax.legend(loc='upper left', bbox_to_anchor=(1,1))
         ax.set_title(plate)
@@ -136,7 +138,7 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
     
     fig, axs = plt.subplots(3,1, figsize=(10,15))
     sns.stripplot(data=comb_stats_df,
-                y='final',
+                y='deplexed_reads',
                 x=plate_col,
                 hue=plate_col,
                 alpha=.3,
@@ -157,7 +159,7 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
     axs[1].axhline(30, c='silver', alpha=.5)
     axs[1].set_xticklabels([])
     sns.stripplot(data=comb_stats_df,
-                y='filter_rate',
+                y='overall_filter_rate',
                 x=plate_col,
                 hue=plate_col,
                 alpha=.3,
@@ -181,7 +183,7 @@ def plot_plate_summaries(comb_stats_df, lims_plate=False):
     # success rate definition
     comb_stats_df['over 1000 mosquito reads'] = comb_stats_df.raw_mosq_reads > 1000
     comb_stats_df['over 30 targets'] = comb_stats_df.targets_recovered > 30
-    comb_stats_df['over 50% reads retained'] = comb_stats_df.filter_rate > .5
+    comb_stats_df['over 50% reads retained'] = comb_stats_df.overall_filter_rate > .5
 
     plates = comb_stats_df[plate_col].unique()
     nplates = comb_stats_df[plate_col].nunique()
@@ -204,7 +206,7 @@ def plot_sample_success(comb_stats_df, anospp=True):
     xcol = 'raw_mosq_targets_recovered' if anospp else 'targets_recovered'
 
     fig, axs = plt.subplots(1,2,figsize=(12,6))
-    for ycol, ax in zip(('raw_mosq_reads', 'filter_rate'), axs):
+    for ycol, ax in zip(('raw_mosq_reads', 'overall_filter_rate'), axs):
         sns.scatterplot(data=comb_stats_df,
                 x=xcol,
                 y=ycol,
@@ -288,15 +290,15 @@ def qc(args):
     logging.info('ANOSPP QC data import started')
 
     samples_df = prep_samples(args.manifest)
-    hap_df = prep_hap(args.haplotypes)
     stats_df = prep_stats(args.stats)
+    hap_df = prep_hap(args.haplotypes)
     
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
 
     logging.info('saving combined stats')
 
     comb_stats_df.to_csv(f'{args.outdir}/combined_stats.tsv', sep='\t', index=False)
-
+    
     logging.info('starting plotting QC')
     
     if hap_df['target'].isin(CUTADAPT_TARGETS).all():
@@ -312,6 +314,7 @@ def qc(args):
     fig = plot_allele_balance(hap_df)
     fig.savefig(f'{args.outdir}/allele_balance.png')
 
+    # deactivated as unused
     # for col in ('nalleles','total_reads'):
     #     fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col=col)
     #     fig.savefig(f'{args.outdir}/sample_target_{col}.png')
@@ -339,9 +342,9 @@ def qc(args):
         heatmap_cols = [
             'P1_reads',
             'P2_reads',
-            'input', 
-            'final',
-            'filter_rate',
+            'total_reads', 
+            'deplexed_reads',
+            'overall_filter_rate',
             'raw_mosq_targets_recovered',
             'raw_multiallelic_mosq_targets'
             ]
@@ -349,7 +352,7 @@ def qc(args):
         heatmap_cols = [
             'input', 
             'final',
-            'filter_rate',
+            'overall_filter_rate',
             'targets_recovered',
             'multiallelic_targets'
             ]

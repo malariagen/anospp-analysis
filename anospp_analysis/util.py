@@ -246,7 +246,8 @@ def prep_samples(samples_fn):
 
 def prep_stats(stats_fn):
     '''
-    load DADA2 stats table
+    load DADA2 stats table from either DADA2_stats.tsv
+    or overall_summary.txt file of ampliseq pipeline
     
     For legacy stats table, summarise across targets
     '''
@@ -258,34 +259,60 @@ def prep_stats(stats_fn):
     stats_df.rename(columns={
         # compatibility with legacy format
         's_Sample':'sample_id',
+        'final':'DADA2_postfilter_reads',
         # compatibility with new format 
         'sample':'sample_id',
-        'DADA2_input':'input'
+        # generic renaming
+        'DADA2_input':'DADA2_input_reads',
+        'filtered':'DADA2_filtered_reads',
+        'denoisedF':'DADA2_denoisedF_reads',
+        'denoisedR':'DADA2_denoisedR_reads',
+        'merged':'DADA2_merged_reads',
+        'nonchim':'DADA2_nonchim_reads'
         },
         inplace=True)
     
     for col in ('sample_id',
-                'input',
-                'filtered',
-                'denoisedF',
-                'denoisedR',
-                'merged',
-                'nonchim'):
+                'DADA2_input_reads',
+                'DADA2_filtered_reads',
+                'DADA2_denoisedF_reads',
+                'DADA2_denoisedR_reads',
+                'DADA2_merged_reads',
+                'DADA2_nonchim_reads'):
         assert col in stats_df.columns, f'stats column {col} not found'
 
     # denoising happens for F and R reads independently, we take minimum of those 
     # as an estimate for retained read count
-    stats_df['denoised'] = stats_df[['denoisedF','denoisedR']].min(axis=1)
+    stats_df['DADA2_denoised_reads'] = stats_df[[
+        'DADA2_denoisedF_reads',
+        'DADA2_denoisedR_reads'
+        ]].min(axis=1)
     # legacy stats calculated separately for each target, merging
     if 'target' in stats_df.columns:
         logging.info(f'summarising legacy DADA2 statistics across targets')
         stats_df = stats_df.groupby('sample_id').sum(numeric_only=True).reset_index()
-    # add final read counts for comatibility with legacy pipeline
-    # that had a post-filtering step
-    if 'final' not in stats_df.columns:
-        stats_df['final'] = stats_df['nonchim']
-    # filter rate 
-    stats_df['filter_rate'] = stats_df['nonchim'] / stats_df['input']
+    # overall_summary.txt
+    if 'cutadapt_total_processed' in stats_df.columns:
+        stats_df.rename(columns={
+            'cutadapt_total_processed':'total_reads',
+            'cutadapt_passing_filters':'readthrough_pass_reads'
+        },
+        inplace=True)
+        # cutadapt stats recorded with commas
+        for col in ('total_reads', 'readthrough_pass_reads'):
+            stats_df[col] = stats_df[col].astype(str).str.replace(',','').astype(int)
+        stats_df.drop(columns=[
+            'cutadapt_reverse_complemented',
+            'cutadapt_passing_filters_percent'
+            ], inplace=True)
+    # DADA2_stats
+    else:
+        logging.warning(
+            'DADA2_stats.tsv provided instead of overall_summary.txt, '
+            'cutadapt readthrough stats will be missing'
+            )
+        stats_df['total_reads'] = stats_df['DADA2_input_reads']
+        stats_df['readthrough_pass_reads'] = stats_df['DADA2_input_reads']
     
     return stats_df
 
@@ -310,6 +337,7 @@ def combine_stats(stats_df, hap_df, samples_df):
     comb_stats_df['targets_recovered'] = comb_stats_df['targets_recovered'].fillna(0).astype(int)
     comb_stats_df['deplexed_reads'] = hap_df[hap_df.target != 'unknown'] \
         .groupby('sample_id')['reads'].sum()
+    comb_stats_df['overall_filter_rate'] = comb_stats_df['deplexed_reads'] / comb_stats_df['total_reads']
     comb_stats_df['multiallelic_targets'] = (hap_df.groupby('sample_id')['target'].value_counts() > 2) \
         .groupby(level='sample_id').sum()
     comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0).astype(int)
