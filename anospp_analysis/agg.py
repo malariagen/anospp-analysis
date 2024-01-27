@@ -3,7 +3,7 @@ import numpy as np
 import os
 import argparse
 
-from .util import *
+from anospp_analysis.util import *
 
 def read_in_results(nn_path, vae_path):
 

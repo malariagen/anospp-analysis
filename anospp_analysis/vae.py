@@ -7,8 +7,8 @@ import argparse
 import keras
 from scipy.spatial import ConvexHull, Delaunay
 
-from .util import *
-from .nn import parse_seqids_series, construct_unique_kmer_table
+from anospp_analysis.util import *
+from anospp_analysis.nn import parse_seqids_series, construct_unique_kmer_table
 
 #Variables
 K = 8

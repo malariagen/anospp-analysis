@@ -6,7 +6,7 @@ import os
 import argparse
 import itertools
 
-from .util import *
+from anospp_analysis.util import *
 
 def recompute_haplotype_coverage(hap_df):
     hap_df = hap_df.drop(["total_reads", "reads_fraction", "nalleles"], axis=1)
@@ -34,7 +34,7 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     filtered_hap_df = hap_df[(hap_df.reads>=int(rc_threshold)) & (hap_df.reads_fraction>=float(rf_threshold))]
     if filtered_hap_df.shape[0] < hap_df.shape[0]:
         logging.warning(f'removed {hap_df.shape[0] - filtered_hap_df.shape[0]} haplotypes '
-                        f'with fewer than {rc_threshold} reads or lower fracion than {rf_threshold} of reads')
+                        f'with fewer than {rc_threshold} reads or fraction lower than {rf_threshold} of reads')
     mosq_hap_df = filtered_hap_df[filtered_hap_df.target.isin(MOSQ_TARGETS)]
     mosq_hap_df = mosq_hap_df.astype({'target': int})
 
@@ -406,21 +406,22 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     #Get row and col info from well_id for ordering samples
     comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
     comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
+    comb_stats_df['well_id'] = well_ordering(comb_stats_df['well_id'])
     comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
     #add samples with <10 targets
     nn_level_result_df = pd.concat([nn_level_result_df, pd.DataFrame(index=comb_stats_df.loc[\
         ~comb_stats_df.sample_id.isin(nn_level_result_df.index), 'sample_id'])]).fillna(0)
     plates = comb_stats_df.plate_id.unique()
-    fig, axes = plt.subplots(len(plates),1, gridspec_kw={'height_ratios': \
-                                                np.append(np.repeat(4, len(plates)-1), 7)})
+    fig, axes = plt.subplots(len(plates), 1, 
+        gridspec_kw={'height_ratios': np.append(np.repeat(4, len(plates)-1), 7)})
     width=0
     for i, plate in enumerate(plates):
         ordered_samples = comb_stats_df.loc[comb_stats_df.plate_id==plate, 'sample_id'].values
+        ordered_sample_names = comb_stats_df.loc[comb_stats_df.plate_id==plate, 'sample_name'].values
         width = max(width, len(ordered_samples))
         nn_level_result_df.loc[ordered_samples].plot(kind='bar', stacked=True, width=1, legend=None,\
                                                      ax=axes[i], color=colors)
-        axes[i].set_xticklabels('')
-        axes[i].set_xticks([])
+        axes[i].set_xticklabels(ordered_sample_names)
         axes[i].hlines(float(nn_asgn_threshold), -.5, nn_level_result_df.loc[ordered_samples].shape[0]-.5, \
                        color='k', ls = ':', linewidth=1)
         axes[i].set_title(f"plate {plate}")
@@ -430,8 +431,9 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     axes[i].margins(y=0)
     fig.suptitle(f"NN assignment {level_label} level")
     fig.set_size_inches(min(20,width),len(plates)*4+3)
-    return fig, axes
+    # plt.tight_layout()
 
+    return fig, axes
 
 def nn(args):
 
@@ -503,26 +505,26 @@ def main():
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
     parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-o', '--outdir', help='Output directory. Default: nn', default='nn')
     parser.add_argument('-r', '--reference_version', help='Reference index version - currently a directory name.\
          Default: nnv1', default='nnv1')
-    parser.add_argument('-o', '--outdir', help='Output directory. Default: nn', default='nn')
-    parser.add_argument('--path_to_refversion', help='path to reference index version.\
+    parser.add_argument('-p', '--path_to_refversion', help='Path to reference index version.\
          Default: ref_databases', default='ref_databases')
     parser.add_argument('--no_plotting', help='Do not generate plots. Default: False', \
                         default=False)
     parser.add_argument('--allelism_normalisation', help='Normalisation method over multiple alleles. Options: \
                          [n_alleles,reads_fraction]. Default: n_alleles', default='n_alleles')
-    parser.add_argument('--hap_read_count_threshold', help='minimum number of reads for supported haplotypes. \
+    parser.add_argument('--hap_read_count_threshold', help='Minimum number of reads for supported haplotypes. \
          Default: 10', default=10)
-    parser.add_argument('--hap_reads_fraction_threshold', help='minimum fraction of reads for supported haplotypes. \
+    parser.add_argument('--hap_reads_fraction_threshold', help='Minimum fraction of reads for supported haplotypes. \
          Default: 0.1', default=0.1)
-    parser.add_argument('--medium_contamination_read_count_threshold', help='samples with fewer than this number \
+    parser.add_argument('--medium_contamination_read_count_threshold', help='Samples with fewer than this number \
                         of reads get medium contamination risk. Default: 1000', default=1000)
-    parser.add_argument('--medium_contamination_multi_allelic_threshold', help='samples with more than this number \
+    parser.add_argument('--medium_contamination_multi_allelic_threshold', help='Samples with more than this number \
                         of multiallelic targets get medium contamination risk. Default: 0', default=0)
-    parser.add_argument('--high_contamination_multi_allelic_threshold', help='samples with more than this number \
+    parser.add_argument('--high_contamination_multi_allelic_threshold', help='Samples with more than this number \
                         of multiallelic targets get high contamination risk. Default: 2', default=2)
-    parser.add_argument('--nn_assignment_threshold', help='required fraction for calling assignment. \
+    parser.add_argument('--nn_assignment_threshold', help='Required fraction for calling assignment. \
                         Default: 0.8', default=0.8)
     parser.add_argument('--n_error_snps', help='Maximum number of snps for a multi-allelic sequence to be \
                         considered a sequencing or PCR error. Default: 2', default=2)

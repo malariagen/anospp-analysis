@@ -106,6 +106,16 @@ def human_format(num):
     else:
         return '%.0f%s' % (num, ['', 'K', 'M', 'G', 'T', 'P'][magnitude])
 
+def well_ordering(well_series):
+
+     # well order for plotting - A1, B1, ...
+    well_sequence = []
+    for col in range(1,13):
+        for row in 'ABCDEFGH': 
+            well_sequence.append(f'{row}{col}')
+
+    return pd.Categorical(well_series, categories=well_sequence)
+
 def prep_hap(hap_fn, anospp=True):
     '''
     load haplotypes table

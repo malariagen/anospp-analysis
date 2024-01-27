@@ -13,7 +13,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from .util import *
+from anospp_analysis.util import *
 
 
 def view_alignment(aln, aln_view_fn, fontsize="9pt", plot_width=1200):

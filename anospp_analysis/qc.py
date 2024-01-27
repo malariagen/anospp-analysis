@@ -7,7 +7,7 @@ from collections import OrderedDict
 import os
 import argparse
 
-from .util import *
+from anospp_analysis.util import *
 
 def plot_target_balance(hap_df):
 
@@ -87,12 +87,6 @@ def plot_sample_filtering(comb_stats_df):
     
     logging.info('plotting per-sample filtering barplots')
 
-    # well order for plotting - A1, B1, ...
-    well_order = []
-    for col in range(1,13):
-        for row in 'ABCDEFGH': 
-            well_order.append(f'{row}{col}')
-
     # comb_stats_df colname : legend label
     dada2_cols = OrderedDict([
         ('total_reads','removed as readthrough'),
@@ -112,7 +106,7 @@ def plot_sample_filtering(comb_stats_df):
     fig, axs = plt.subplots(nplates,1,figsize=(20, 4 * nplates))
     for plate, ax in zip(plates, axs):
         plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy()
-        plot_df['well_id'] = pd.Categorical(plot_df['well_id'], categories=well_order)
+        plot_df['well_id'] = well_ordering(plot_df['well_id'])
         plot_df.sort_values(by='well_id', inplace=True)
         for i, col in enumerate(dada2_cols.keys()):
             sns.barplot(x='sample_id', y=col, data=plot_df, 

@@ -1,4 +1,3 @@
-
 import argparse
 import os
 import sys
@@ -12,8 +11,8 @@ from Bio import AlignIO
 from Bio import Phylo
 import warnings
 
-from .util import *
-from .iplot import plot_plate_view
+from anospp_analysis.util import *
+from anospp_analysis.iplot import plot_plate_view
 
 
 
@@ -929,9 +928,9 @@ def main():
         parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='plasm')
         parser.add_argument('-w', '--workdir', help='Working directory. Default: work', default='work')
         parser.add_argument('-f', '--hard_filters', help='Remove all sequences supported by less tahn X reads \
-                            for P1 and P2. Default: 10,10')
+                            for P1 and P2. Default: 10,10', default='10,10')
         parser.add_argument('-g', '--soft_filters', help='Mark as non-confident any sequences of the predominant haplotype that are \
-                            supported by fewer than X reads for P1 and P2. Default: 10,10')
+                            supported by fewer than X reads for P1 and P2. Default: 10,10', default='10,10')
         parser.add_argument('-i', '--interactive_plotting', 
                                 help='do interactive plotting', action='store_true', default=False)
         parser.add_argument('--filter_falciparum', help='Check for the highest occuring haplotypes of Plasmodium falciparum and filter', 
