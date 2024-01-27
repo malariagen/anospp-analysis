@@ -289,9 +289,9 @@ def qc(args):
     
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
 
-    logging.info('saving combined stats')
+    logging.info('saving sample QC stats')
 
-    comb_stats_df.to_csv(f'{args.outdir}/combined_stats.tsv', sep='\t', index=False)
+    comb_stats_df.to_csv(f'{args.outdir}/sample_qc_stats.tsv', sep='\t', index=False)
     
     logging.info('starting plotting QC')
     
