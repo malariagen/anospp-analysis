@@ -276,9 +276,7 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
     Returns:
     - pd.DataFrame: A filtered pandas DataFrame containing the blast results for the haplotype data.
     """
-
-
-
+    
     logging.info(f'running blast for {target}')
     
     # Filter the hapdata to the current targe
@@ -308,10 +306,10 @@ def run_blast(hap_data, target, workdir, path_to_refversion, reference_version):
 
     assert os.path.isdir(reference_path), f'reference version {reference_version} does not exist at {reference_path}'
 
-    assert os.path.isfile(f'{reference_path}/plasmomito_P1P2_DB.ndb'), f'reference version {reference_version} at {reference_path} \
-        does not contain required plasmomito_P1P2_DB.ndb file'
+    assert os.path.isfile(f'{reference_path}/plasmomito_P1P2_DB_v1.0.ndb'), f'reference version {reference_version} at {reference_path} \
+        does not contain required plasmomito_P1P2_DB_v1.0.ndb file'
     
-    blastdb = f'{path_to_refversion}/{reference_version}/plasmomito_P1P2_DB'
+    blastdb = f'{path_to_refversion}/{reference_version}/plasmomito_P1P2_DB_v1.0'
 
     # Run blast and capture the output
     cmd = (
@@ -833,19 +831,9 @@ def generate_stats(samples_df, haps_merged_df, merged_hap_df, df_all, outdir):
 
 def plasm(args):
 
-    """
-    Run the plasm program to analyze ANOSPP QC data, including preparing input data and variables, running BLAST, 
-    creating a dataframe, and generating plots.
-    
-    Args:
-    - args (argparse.Namespace): Namespace object containing command line arguments
-    
-    Returns:
-    - None
-    """
-
     # Set up logging and create output directories
     setup_logging(verbose=args.verbose)
+
     os.makedirs(args.outdir, exist_ok=True)
     os.makedirs(args.workdir, exist_ok=True)
 
@@ -863,7 +851,6 @@ def plasm(args):
     if len(haps_merged_df['target'].unique()) < 1:
         logging.warning('Could not find both PLASM_TARGETS in hap_df')
         sys.exit(1)
-
 
     try:
         # Run BLAST and create haplotype tree for each target
@@ -906,65 +893,32 @@ def plasm(args):
 
 def main():
 
-    """
-    Entry point for the PLASM analysis.
 
-    Parses command-line arguments, sets up logging, validates input files and directories,
-    and executes the PLASM analysis.
-
-    Raises:
-        FileNotFoundError: If any input file is not found.
-        RuntimeError: If an exception occurs during PLASM analysis.
-    """
-    
-    try:
-        parser = argparse.ArgumentParser("Plasmodium ID assignment for ANOSPP data")
-        parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
-        parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
-        parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
-                            Default: ref_databases', default='ref_databases')
-        parser.add_argument('-r', '--reference_version', help='Reference index version - currently a directory name. \
-                            Default: plasmv1', default='plasmv1')
-        parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='plasm')
-        parser.add_argument('-w', '--workdir', help='Working directory. Default: work', default='work')
-        parser.add_argument('-f', '--hard_filters', help='Remove all sequences supported by less tahn X reads \
-                            for P1 and P2. Default: 10,10', default='10,10')
-        parser.add_argument('-g', '--soft_filters', help='Mark as non-confident any sequences of the predominant haplotype that are \
-                            supported by fewer than X reads for P1 and P2. Default: 10,10', default='10,10')
-        parser.add_argument('-i', '--interactive_plotting', 
-                                help='do interactive plotting', action='store_true', default=False)
-        parser.add_argument('--filter_falciparum', help='Check for the highest occuring haplotypes of Plasmodium falciparum and filter', 
-                            action='store_true', default=False)
-        parser.add_argument('-v', '--verbose', 
-                            help='Include INFO level log messages', action='store_true')
+    parser = argparse.ArgumentParser("Plasmodium ID assignment for ANOSPP data")
+    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
+    parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
+    parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
+                        Default: ref_databases', default='ref_databases')
+    parser.add_argument('-r', '--reference_version', help='Reference index version - currently a directory name. \
+                        Default: plasmv1', default='plasmv1')
+    parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='plasm')
+    parser.add_argument('-w', '--workdir', help='Working directory. Default: work', default='work')
+    parser.add_argument('-f', '--hard_filters', help='Remove all sequences supported by less tahn X reads \
+                        for P1 and P2. Default: 10,10', default='10,10')
+    parser.add_argument('-g', '--soft_filters', help='Mark as non-confident any sequences of the predominant haplotype that are \
+                        supported by fewer than X reads for P1 and P2. Default: 10,10', default='10,10')
+    parser.add_argument('-i', '--interactive_plotting', 
+                            help='do interactive plotting', action='store_true', default=False)
+    parser.add_argument('--filter_falciparum', help='Check for the highest occuring haplotypes of Plasmodium falciparum and filter', 
+                        action='store_true', default=False)
+    parser.add_argument('-v', '--verbose', 
+                        help='Include INFO level log messages', action='store_true')
 
 
-        args = parser.parse_args()
-        args.outdir=args.outdir.rstrip('/')
+    args = parser.parse_args()
+    args.outdir=args.outdir.rstrip('/')
 
-        # Set logging level based on verbosity
-        logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING)
-
-        # Validate and normalize directory paths
-        args.haplotypes = os.path.abspath(args.haplotypes)
-        args.manifest = os.path.abspath(args.manifest)
-        args.path_to_refversion = os.path.abspath(args.path_to_refversion)
-        args.outdir = os.path.abspath(args.outdir)
-        args.workdir = os.path.abspath(args.workdir)
-
-        # Validate input file paths
-        for file_path in [args.haplotypes, args.manifest]:
-            if not os.path.exists(file_path):
-                error_message = f"Error: File '{file_path}' does not exist."
-                logging.error(error_message)
-                raise FileNotFoundError(error_message)
-
-        plasm(args)
-
-    except Exception as e:
-        error_message = f"Error: An exception occurred during PLASM analysis: {e}"
-        logging.error(error_message)
-        raise RuntimeError(error_message)
+    plasm(args)
 
 
 if __name__ == '__main__':
