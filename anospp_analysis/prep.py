@@ -90,7 +90,18 @@ def get_hap_df(dada_table, demult_dir):
     }, inplace=True)
     # collapse identical sequences
     hap_df = hap_df.groupby(['sample_id','target','consensus'])['reads'].sum().reset_index()
-    hap_df = hap_df.query('reads > 0')
+    # remove unsupported sequences
+    hap_df = hap_df.query('reads > 0').copy()
+
+    hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
+        ['reads'].transform('sum')
+    
+    hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
+
+    hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
+        ['consensus'].transform('nunique')
+
+    hap_df = seqid_generator(hap_df)
 
     return hap_df
 
@@ -108,7 +119,11 @@ def prep_dada2(args):
         'sample_id',
         'target',
         'consensus',
-        'reads'
+        'reads',
+        'total_reads',
+        'reads_fraction',
+        'nalleles',
+        'seqid'
     ]].to_csv(args.out_haps, sep='\t', index=False)
 
     logging.info('ANOSPP data prep complete')

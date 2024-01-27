@@ -77,8 +77,7 @@ def lims_well_id_mapper():
 
 def seqid_generator(hap_df):
     '''
-    assign identifyer to unique haplotypes
-    used in nn/construct_unique_kmer_table
+    assign identifiers to unique haplotypes
     '''
 
     seqids = dict()
@@ -145,14 +144,11 @@ def prep_hap(hap_fn, anospp=True):
     if 'reads_fraction' not in hap_df.columns:
         hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
 
-    if 'nalleles' not in hap_df.columns:
-        hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
-            ['consensus'].transform('nunique')
+    if 'seqid' not in hap_df.columns:
+        hap_df = seqid_generator(hap_df)
 
     hap_df['consensus'] = hap_df['consensus'].str.upper()
-        
-    hap_df = seqid_generator(hap_df)
-
+    
     if hap_df['target'].isin(CUTADAPT_TARGETS).all():
         hap_df['target'] = pd.Categorical(hap_df['target'], 
                                         categories=CUTADAPT_TARGETS, 
