@@ -346,7 +346,8 @@ def qc(args):
             'deplexed_reads',
             'overall_filter_rate',
             'raw_mosq_targets_recovered',
-            'raw_multiallelic_mosq_targets'
+            'raw_multiallelic_mosq_targets',
+            'unassigned_haps'
             ]
     else:
         heatmap_cols = [
@@ -368,6 +369,9 @@ def qc(args):
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = 62
             elif col == 'raw_multiallelic_mosq_targets':
+                heatmap_kwargs['vmin'] = 0
+                heatmap_kwargs['vmax'] = max(comb_stats_df[col])
+            elif col == 'unassigned_haps':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = max(comb_stats_df[col])
             elif col == 'filter_rate':
