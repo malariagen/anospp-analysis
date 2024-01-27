@@ -89,6 +89,23 @@ def seqid_generator(hap_df):
 
     return hap_df
 
+def human_format(num):
+    if num is None:
+        return ''
+    magnitude = 0
+    while abs(num) >= 1000:
+        magnitude += 1
+        num /= 1000.0
+    # 1 though 999
+    if magnitude == 0:
+        return '%.0f' % (num)
+    # 1.0k through 99.9k
+    elif num < 100:
+        return '%.1f%s' % (num, ['', 'K', 'M', 'G', 'T', 'P'][magnitude])
+    # 100k through 999k
+    else:
+        return '%.0f%s' % (num, ['', 'K', 'M', 'G', 'T', 'P'][magnitude])
+
 def prep_hap(hap_fn, anospp=True):
     '''
     load haplotypes table
@@ -110,9 +127,6 @@ def prep_hap(hap_fn, anospp=True):
                 'consensus',
                 'reads'):
         assert col in hap_df.columns, f'hap column {col} not found'
-
-    if 'reads_log10' not in hap_df.columns:
-        hap_df['reads_log10'] = hap_df['reads'].apply(lambda x: np.log10(x))
 
     if 'total_reads' not in hap_df.columns:
         hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
@@ -270,9 +284,6 @@ def prep_stats(stats_fn):
     # that had a post-filtering step
     if 'final' not in stats_df.columns:
         stats_df['final'] = stats_df['nonchim']
-    # logscale read counts, placeholder value for zero - -1
-    for col in stats_df.columns.drop(['sample_id']):
-        stats_df[f'{col}_log10'] = stats_df[col].replace(0,0.1).apply(lambda x: np.log10(x))
     # filter rate 
     stats_df['filter_rate'] = stats_df['nonchim'] / stats_df['input']
     
@@ -296,27 +307,25 @@ def combine_stats(stats_df, hap_df, samples_df):
     comb_stats_df.set_index('sample_id', inplace=True)
     comb_stats_df['targets_recovered'] = hap_df.groupby('sample_id') \
         ['target'].nunique()
-    comb_stats_df['targets_recovered'] = comb_stats_df['targets_recovered'].fillna(0)
+    comb_stats_df['targets_recovered'] = comb_stats_df['targets_recovered'].fillna(0).astype(int)
+    comb_stats_df['deplexed_reads'] = hap_df[hap_df.target != 'unknown'] \
+        .groupby('sample_id')['reads'].sum()
     comb_stats_df['multiallelic_targets'] = (hap_df.groupby('sample_id')['target'].value_counts() > 2) \
         .groupby(level='sample_id').sum()
-    comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0)
+    comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0).astype(int)
     comb_stats_df['raw_mosq_targets_recovered'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['target'].nunique()
-    comb_stats_df['raw_mosq_targets_recovered'] = comb_stats_df['raw_mosq_targets_recovered'].fillna(0)
+    comb_stats_df['raw_mosq_targets_recovered'] = comb_stats_df['raw_mosq_targets_recovered'].fillna(0).astype(int)
     comb_stats_df['raw_mosq_reads'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['reads'].sum()
-    comb_stats_df['raw_mosq_reads'] = comb_stats_df['raw_mosq_reads'].fillna(0)
-    comb_stats_df['raw_mosq_log10_reads'] = comb_stats_df['raw_mosq_reads'] \
-        .replace(0,0.1).apply(lambda x: np.log10(x))
+    comb_stats_df['raw_mosq_reads'] = comb_stats_df['raw_mosq_reads'].fillna(0).astype(int)
     for pt in PLASM_TARGETS:
         comb_stats_df[f'{pt}_reads'] = hap_df[hap_df.target == pt] \
             .groupby('sample_id')['reads'].sum()
-        comb_stats_df[f'{pt}_reads'] = comb_stats_df[f'{pt}_reads'].fillna(0)
-        comb_stats_df[f'{pt}_log10_reads'] = comb_stats_df[f'{pt}_reads'] \
-            .replace(0,0.1).apply(lambda x: np.log10(x))
+        comb_stats_df[f'{pt}_reads'] = comb_stats_df[f'{pt}_reads'].fillna(0).astype(int)
     comb_stats_df['raw_multiallelic_mosq_targets'] = (hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
-    comb_stats_df['raw_multiallelic_mosq_targets'] = comb_stats_df['raw_multiallelic_mosq_targets'].fillna(0)
+    comb_stats_df['raw_multiallelic_mosq_targets'] = comb_stats_df['raw_multiallelic_mosq_targets'].fillna(0).astype(int)
     comb_stats_df.reset_index(inplace=True)
     comb_stats_df.sort_values(by='tag_index', inplace=True)
         
