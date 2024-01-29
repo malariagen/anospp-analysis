@@ -147,6 +147,10 @@ def prep_hap(hap_fn, anospp=True):
     if 'seqid' not in hap_df.columns:
         hap_df = seqid_generator(hap_df)
 
+    if 'nalleles' not in hap_df.columns:
+        hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['seqid'].transform('nunique')
+
     hap_df['consensus'] = hap_df['consensus'].str.upper()
     
     if hap_df['target'].isin(CUTADAPT_TARGETS).all():

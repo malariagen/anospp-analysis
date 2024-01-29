@@ -314,7 +314,7 @@ def main():
     parser.add_argument('-r', '--reference_version', help='Reference index version - currently a directory name. \
                         Default: plasmv1', default='plasmv1')
     parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='plasm')
-    parser.add_argument('-w', '--workdir', help='Working directory. Default: work', default='work')
+    # parser.add_argument('-w', '--workdir', help='Working directory. Default: work', default='work')
     # parser.add_argument('-f', '--hard_filters', help='Remove all sequences supported by less tahn X reads \
     #                     for P1 and P2. Default: 10,10', default='10,10')
     parser.add_argument('-f', '--filters', help='Mark as non-confident any sequences of the predominant haplotype that are \
