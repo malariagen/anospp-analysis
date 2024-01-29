@@ -634,7 +634,7 @@ def main():
     parser.add_argument('-r', '--reference_version', help='Reference index version - \
                         currently a directory name. Default: gcrefv1', default='gcrefv1')
     parser.add_argument('-o', '--outdir', help='Output directory. Default: vae', default='vae')
-    parser.add_argument('--path_to_refversion', help='path to reference index version.\
+    parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
          Default: ref_databases', default='ref_databases')
     parser.add_argument('--no_plotting', help='Do not generate plots. Default: False', \
                         default=False)

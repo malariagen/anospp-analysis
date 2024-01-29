@@ -107,7 +107,7 @@ def human_format(num):
 
 def well_ordering(well_series):
 
-     # well order for plotting - A1, B1, ...
+    # well order for plotting - A1, B1, ...
     well_sequence = []
     for col in range(1,13):
         for row in 'ABCDEFGH': 

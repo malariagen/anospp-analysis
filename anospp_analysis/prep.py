@@ -131,7 +131,7 @@ def prep_dada2(args):
 def main():
     
     parser = argparse.ArgumentParser("Convert DADA2 output to ANOSPP haplotypes tsv")
-    parser.add_argument('-t', '--dada_table', help='DADA2 table tsv file', required=True)
+    parser.add_argument('-t', '--dada_table', help='dada2 output table, in ampliseq pipeline it is called DADA2_table.tsv', required=True)
     parser.add_argument('-a', '--adapters', help='adapters fasta file for deplexing with cutadapt', required=True)
     parser.add_argument('-o', '--out_haps', help='output haplotypes tsv file. Default: haps.tsv', default='haps.tsv')
     parser.add_argument('-w', '--work_dir', help='working directory for intermediate files. Default: work',

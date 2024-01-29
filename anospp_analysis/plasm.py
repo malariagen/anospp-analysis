@@ -269,7 +269,7 @@ def plasm(args):
     setup_logging(verbose=args.verbose)
 
     os.makedirs(args.outdir, exist_ok=True)
-    os.makedirs(args.workdir, exist_ok=True)
+    # os.makedirs(args.workdir, exist_ok=True)
 
     filters = [int(i) for i in args.filters.split(',')]
     # TODO verify ref
@@ -293,11 +293,11 @@ def plasm(args):
 
     sum_hap_df = summarise_haplotypes(hap_df, blast_df, contam_df)
 
-    sum_hap_df.to_csv(f'{args.outdir}/plasmodium_hap_summary.tsv', sep='\t', index=False)
+    sum_hap_df.to_csv(f'{args.outdir}/plasm_hap_summary.tsv', sep='\t', index=False)
 
     sum_samples_df = summarise_samples(sum_hap_df, samples_df, filters)
 
-    sum_samples_df.to_csv(f'{args.outdir}/plasmodium_sample_summary.tsv', sep='\t')
+    sum_samples_df.to_csv(f'{args.outdir}/plasm_sample_summary.tsv', sep='\t')
 
     logging.info('ANOSPP plasm complete')
 

@@ -434,7 +434,7 @@ def main():
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
-    parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-s', '--stats', help='overall_summary.txt file from ampliseq pipeline or DADA2 stats tsv file', required=True)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='qc')
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
