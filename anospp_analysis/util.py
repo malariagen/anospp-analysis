@@ -137,6 +137,7 @@ def prep_hap(hap_fn, anospp=True):
                 'reads'):
         assert col in hap_df.columns, f'hap column {col} not found'
 
+    # duplicates anospp_analysis.prep.get_hap_df
     if 'total_reads' not in hap_df.columns:
         hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
             ['reads'].transform('sum')
@@ -342,27 +343,27 @@ def combine_stats(stats_df, hap_df, samples_df):
 
     comb_stats_df = pd.merge(stats_df, samples_df, on='sample_id', how='inner')
     comb_stats_df.set_index('sample_id', inplace=True)
+    
+    comb_stats_df['target_reads'] = hap_df[hap_df.target != 'unknown'] \
+        .groupby('sample_id')['reads'].sum().fillna(0).astype(int)
+    
+    comb_stats_df['overall_filter_rate'] = comb_stats_df['target_reads'] / comb_stats_df['total_reads']
 
+    comb_stats_df['unassigned_asvs'] = hap_df[hap_df.target == 'unknown'] \
+        .groupby('sample_id')['consensus'].nunique()
+    comb_stats_df['unassigned_asvs'] = comb_stats_df['unassigned_asvs'].fillna(0).astype(int)
+    
     comb_stats_df['targets_recovered'] = hap_df.groupby('sample_id') \
         ['target'].nunique()
     comb_stats_df['targets_recovered'] = comb_stats_df['targets_recovered'].fillna(0).astype(int)
     
-    comb_stats_df['deplexed_reads'] = hap_df[hap_df.target != 'unknown'] \
-        .groupby('sample_id')['reads'].sum().fillna(0).astype(int)
-    
-    comb_stats_df['overall_filter_rate'] = comb_stats_df['deplexed_reads'] / comb_stats_df['total_reads']
-    
-    comb_stats_df['multiallelic_targets'] = (hap_df.groupby('sample_id')['target'].value_counts() > 2) \
-        .groupby(level='sample_id').sum()
-    comb_stats_df['multiallelic_targets'] = comb_stats_df['multiallelic_targets'].fillna(0).astype(int)
-    
     comb_stats_df['raw_mosq_targets_recovered'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['target'].nunique()
     comb_stats_df['raw_mosq_targets_recovered'] = comb_stats_df['raw_mosq_targets_recovered'].fillna(0).astype(int)
-    
-    comb_stats_df['unassigned_haps'] = hap_df[hap_df.target == 'unknown'] \
-        .groupby('sample_id')['consensus'].nunique()
-    comb_stats_df['unassigned_haps'] = comb_stats_df['unassigned_haps'].fillna(0).astype(int)
+
+    comb_stats_df['raw_multiallelic_mosq_targets'] = (hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
+        .groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
+    comb_stats_df['raw_multiallelic_mosq_targets'] = comb_stats_df['raw_multiallelic_mosq_targets'].fillna(0).astype(int)
     
     comb_stats_df['raw_mosq_reads'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
         .groupby('sample_id')['reads'].sum()
@@ -372,10 +373,6 @@ def combine_stats(stats_df, hap_df, samples_df):
         comb_stats_df[f'{pt}_reads'] = hap_df[hap_df.target == pt] \
             .groupby('sample_id')['reads'].sum()
         comb_stats_df[f'{pt}_reads'] = comb_stats_df[f'{pt}_reads'].fillna(0).astype(int)
-    
-    comb_stats_df['raw_multiallelic_mosq_targets'] = (hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
-        .groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
-    comb_stats_df['raw_multiallelic_mosq_targets'] = comb_stats_df['raw_multiallelic_mosq_targets'].fillna(0).astype(int)
     
     comb_stats_df.reset_index(inplace=True)
     comb_stats_df.sort_values(by='tag_index', inplace=True)

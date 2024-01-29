@@ -9,6 +9,28 @@ import argparse
 
 from anospp_analysis.util import *
 
+def write_qc_stats(comb_stats_df, out_fn):
+
+    comb_stats_df[[
+        'sample_id',
+        'total_reads',
+        'readthrough_pass_reads',
+        'DADA2_input_reads',
+        'DADA2_filtered_reads',
+        'DADA2_denoised_reads',
+        'DADA2_merged_reads',
+        'DADA2_nonchim_reads',
+        'target_reads',
+        'overall_filter_rate',
+        'unassigned_asvs',
+        'targets_recovered',
+        'raw_mosq_targets_recovered',
+        'raw_multiallelic_mosq_targets',
+        'raw_mosq_reads',
+        'P1_reads',
+        'P2_reads'
+    ]].to_csv(out_fn, sep='\t', index=False)
+
 def plot_target_balance(hap_df):
 
     logging.info('plotting targets balance')
@@ -22,6 +44,7 @@ def plot_target_balance(hap_df):
         alpha = .1, jitter = .3, ax = ax)
     ax.get_legend().remove()
     ax.set_yscale('log')
+    # ax.set_ylim(bottom=0.5)
     ax.set_ylabel('reads')
     ax.set_xlabel('target')
     ax.axhline(10, c='silver', alpha=.5)
@@ -65,7 +88,7 @@ def plot_sample_target_heatmap(hap_df, samples_df, col):
     plates = samples_df['plate_id'].unique()
     nplates = len(plates)
 
-    fig, axs = plt.subplots(nplates,1,figsize=(22, 15 * nplates))
+    fig, axs = plt.subplots(nplates, 1, figsize=(22, 15 * nplates))
 
     for plate, ax in zip(plates, axs):
         plate_samples = samples_df.loc[samples_df['plate_id'] == plate, 'sample_id']
@@ -97,7 +120,7 @@ def plot_sample_filtering(comb_stats_df):
         ('DADA2_nonchim_reads','unassigned to amplicons'),
         # legacy post-filter disabled in prod
         # ('DADA2_final_reads','unassigned to amplicons'),
-        ('deplexed_reads','Plasmodium reads'),
+        ('target_reads','Plasmodium reads'),
         ('raw_mosq_reads','mosquito reads')
         ])
     
@@ -111,7 +134,7 @@ def plot_sample_filtering(comb_stats_df):
         for i, col in enumerate(dada2_cols.keys()):
             sns.barplot(x='sample_id', y=col, data=plot_df, 
                         color=sns.color_palette()[i], ax=ax,
-                        label=dada2_cols[col])
+                        label=dada2_cols[col], width=1)
         ax.set_xticklabels(plot_df['sample_name'])
         ax.set_xlabel('sample_name')
         ax.tick_params(axis='x', rotation=90)
@@ -132,13 +155,14 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
     
     fig, axs = plt.subplots(3,1, figsize=(10,15))
     sns.stripplot(data=comb_stats_df,
-                y='deplexed_reads',
+                y='target_reads',
                 x=plate_col,
                 hue=plate_col,
                 alpha=.3,
                 jitter=.35,
                 ax=axs[0])
     axs[0].set_yscale('log')
+    axs[0].set_ylim(bottom=1)
     # 1000 reads cutoff
     axs[0].axhline(1000, c='silver', alpha=.5)
     axs[0].set_xticklabels([])
@@ -149,6 +173,8 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
                 alpha=.3,
                 jitter=.35,
                 ax=axs[1])
+
+    axs[1].set_ylim(bottom=0, top=62)
     # 30 targets cutoff
     axs[1].axhline(30, c='silver', alpha=.5)
     axs[1].set_xticklabels([])
@@ -159,6 +185,7 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
                 alpha=.3,
                 jitter=.35,
                 ax=axs[2])
+    axs[2].set_ylim(bottom=0, top=1)
     # 50% filtering cutoff
     axs[2].axhline(.5, c='silver', alpha=.5)
     for ax in axs:
@@ -207,10 +234,15 @@ def plot_sample_success(comb_stats_df, anospp=True):
                 hue='plate_id',
                 alpha=.5, 
                 ax=ax)
-        ax.axvline(30, c='silver', alpha=.5)
+        ax.set_xlim(left=0)
+        if anospp:
+            ax.axvline(30, c='silver', alpha=.5)
+            ax.set_xlim(right=62)
     axs[0].set_yscale('log')
+    axs[0].set_ylim(bottom=0)
     axs[0].axhline(1000, c='silver', alpha=.5)
     axs[1].axhline(.5, c='silver', alpha=.5)
+    axs[1].set_ylim(bottom=0, top=1)
     axs[1].get_legend().remove()
 
     return fig, axs
@@ -219,8 +251,8 @@ def plot_plasm_balance(comb_stats_df):
 
     logging.info('plotting Plasmodium read balance')
 
-    max_p_log = max(comb_stats_df.P1_reads.max(), 
-                    comb_stats_df.P2_reads.max())
+    max_plasm_reads = max(comb_stats_df.P1_reads.max(), 
+                          comb_stats_df.P2_reads.max())
 
     fig, ax = plt.subplots(1,1,figsize=(5,5))
     sns.scatterplot(data=comb_stats_df,
@@ -231,7 +263,7 @@ def plot_plasm_balance(comb_stats_df):
                     ax=ax)
     ax.axhline(10, c='silver', alpha=.5)
     ax.axvline(10, c='silver', alpha=.5)
-    ax.plot([0.9, max_p_log], [0.9, max_p_log], color='silver', linestyle='dashed', alpha=.5)
+    ax.plot([0.9, max_plasm_reads], [0.9, max_plasm_reads], color='silver', linestyle='dashed', alpha=.5)
     ax.set_yscale('log')
     ax.set_xscale('log')
 
@@ -281,7 +313,7 @@ def qc(args):
 
     os.makedirs(args.outdir, exist_ok = True)
     
-    logging.info('ANOSPP QC data import started')
+    logging.info('ANOSPP QC data import')
 
     samples_df = prep_samples(args.manifest)
     stats_df = prep_stats(args.stats)
@@ -291,9 +323,9 @@ def qc(args):
 
     logging.info('saving sample QC stats')
 
-    comb_stats_df.to_csv(f'{args.outdir}/sample_qc_stats.tsv', sep='\t', index=False)
+    write_qc_stats(comb_stats_df, f'{args.outdir}/sample_qc_stats.tsv')
     
-    logging.info('starting plotting QC')
+    logging.info('plotting QC')
     
     if hap_df['target'].isin(CUTADAPT_TARGETS).all():
         anospp = True
@@ -337,19 +369,19 @@ def qc(args):
             'P1_reads',
             'P2_reads',
             'total_reads', 
-            'deplexed_reads',
+            'target_reads',
             'overall_filter_rate',
             'raw_mosq_targets_recovered',
             'raw_multiallelic_mosq_targets',
-            'unassigned_haps'
+            'unassigned_asvs'
             ]
     else:
         heatmap_cols = [
-            'input', 
-            'final',
+            'total_reads', 
+            'target_reads',
             'overall_filter_rate',
             'targets_recovered',
-            'multiallelic_targets'
+            'unassigned_asvs'
             ]
 
     for col in heatmap_cols:
@@ -365,7 +397,7 @@ def qc(args):
             elif col == 'raw_multiallelic_mosq_targets':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = max(comb_stats_df[col])
-            elif col == 'unassigned_haps':
+            elif col == 'unassigned_asvs':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = max(comb_stats_df[col])
             elif col == 'filter_rate':
