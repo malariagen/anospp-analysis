@@ -239,7 +239,7 @@ def plot_sample_success(comb_stats_df, anospp=True):
             ax.axvline(30, c='silver', alpha=.5)
             ax.set_xlim(right=62)
     axs[0].set_yscale('log')
-    axs[0].set_ylim(bottom=0)
+    axs[0].set_ylim(bottom=1)
     axs[0].axhline(1000, c='silver', alpha=.5)
     axs[1].axhline(.5, c='silver', alpha=.5)
     axs[1].set_ylim(bottom=0, top=1)
