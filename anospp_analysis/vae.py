@@ -431,7 +431,7 @@ def get_closest_hulls(hull_dict, latent_positions_df, unassigned):
     summary_dist_df = pd.DataFrame(index=dist_df.index)
     summary_dist_df['dist1'] = dist_df.min(axis=1)
     summary_dist_df['species1'] = dist_df.idxmin(axis=1)
-    summary_dist_df['dist2'] = dist_df.apply(lambda x: x.sort_values()[1], axis=1)
+    summary_dist_df['dist2'] = dist_df.apply(lambda x: x.sort_values().iloc[1], axis=1)
     summary_dist_df['species2'] = dist_df.apply(lambda x: x.sort_values().index[1], axis=1)
     return summary_dist_df, dist_df
 

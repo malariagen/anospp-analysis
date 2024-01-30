@@ -35,14 +35,14 @@ def plot_target_balance(hap_df):
 
     logging.info('plotting targets balance')
 
-    reads_per_sample_target = hap_df.groupby(['sample_id','target'])['reads'].sum().reset_index()
+    reads_per_sample_target = hap_df.groupby(['sample_id','target'], observed=False)['reads'].sum().reset_index()
     
     figsize = (hap_df['target'].nunique() * 0.3, 6)
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     sns.stripplot(data=reads_per_sample_target,
         x = 'target', y = 'reads', hue = 'target', 
         alpha = .1, jitter = .3, ax = ax)
-    ax.get_legend().remove()
+    # ax.get_legend().remove()
     ax.set_yscale('log')
     # ax.set_ylim(bottom=0.5)
     ax.set_ylabel('reads')
@@ -135,6 +135,7 @@ def plot_sample_filtering(comb_stats_df):
             sns.barplot(x='sample_id', y=col, data=plot_df, 
                         color=sns.color_palette()[i], ax=ax,
                         label=dada2_cols[col], width=1)
+        ax.set_xticks(range(plot_df.shape[0]))
         ax.set_xticklabels(plot_df['sample_name'])
         ax.set_xlabel('sample_name')
         ax.tick_params(axis='x', rotation=90)
@@ -188,8 +189,8 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
     axs[2].set_ylim(bottom=0, top=1)
     # 50% filtering cutoff
     axs[2].axhline(.5, c='silver', alpha=.5)
-    for ax in axs:
-        ax.get_legend().remove()
+    # for ax in axs:
+    #     ax.get_legend().remove()
     plt.xticks(rotation=90)
     plt.tight_layout()
 
@@ -294,7 +295,7 @@ def plot_plate_heatmap(comb_stats_df, col, lims_plate=False, **heatmap_kwargs):
         if 'fmt' in heatmap_kwargs.keys():
             if heatmap_kwargs['fmt'] == '':
                 # human formatted labels
-                heatmap_kwargs['annot'] = hdf.applymap(human_format)
+                heatmap_kwargs['annot'] = hdf.map(human_format)
                 # handling of zero counts
                 hdf = hdf.replace(0, 0.1)
         sns.heatmap(hdf, ax=ax, **heatmap_kwargs)
