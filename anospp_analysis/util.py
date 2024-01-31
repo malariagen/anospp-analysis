@@ -164,7 +164,7 @@ def prep_hap(hap_fn, anospp=True):
     hap_df.sort_values(by=[
         'sample_id',
         'target'
-    ], inplace=True)
+        ], inplace=True)
 
     return hap_df
 
@@ -234,9 +234,9 @@ def prep_samples(samples_fn):
     if ('id_library_lims' in samples_df.columns and
         samples_df.id_library_lims.str.contains(':').all()):
             logging.info('inferring lims_plate_id from id_library_lims')
-            samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(':', 
-                                                                                                n = 1, 
-                                                                                                expand=True)
+            samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(
+                ':', n = 1, expand=True
+                )
     else:
         logging.info('inferring lims_plate_id from tags')
         samples_df['lims_plate_id'] = samples_df.apply(lambda r: f'lp_{r.run_id}_{(r.tag_index - 1) // 384 + 1}',
@@ -311,11 +311,11 @@ def prep_stats(stats_fn):
         inplace=True)
         # cutadapt stats recorded with commas
         for col in ('total_reads', 'readthrough_pass_reads'):
-            stats_df[col] = stats_df[col].astype(str).str.replace(',','').astype(int)
-        stats_df.drop(columns=[
-            'cutadapt_reverse_complemented',
-            'cutadapt_passing_filters_percent'
-            ], inplace=True)
+            stats_df[col] = stats_df[col].astype(str).str.replace(',', '').astype(int)
+        stats_df.drop(
+            columns=['cutadapt_reverse_complemented', 'cutadapt_passing_filters_percent'],
+            inplace=True
+            )
     # DADA2_stats
     else:
         logging.warning(
@@ -361,8 +361,9 @@ def combine_stats(stats_df, hap_df, samples_df):
         .groupby('sample_id')['target'].nunique()
     comb_stats_df['raw_mosq_targets_recovered'] = comb_stats_df['raw_mosq_targets_recovered'].fillna(0).astype(int)
 
-    comb_stats_df['raw_multiallelic_mosq_targets'] = (hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
-        .groupby('sample_id')['target'].value_counts() > 2).groupby(level='sample_id').sum()
+    comb_stats_df['raw_multiallelic_mosq_targets'] = (
+        hap_df[hap_df.target.isin(MOSQ_TARGETS)].groupby('sample_id')['target'].value_counts() > 2
+        ).groupby(level='sample_id').sum()
     comb_stats_df['raw_multiallelic_mosq_targets'] = comb_stats_df['raw_multiallelic_mosq_targets'].fillna(0).astype(int)
     
     comb_stats_df['raw_mosq_reads'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \

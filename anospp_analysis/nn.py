@@ -639,6 +639,7 @@ def main():
 
     args = parser.parse_args()
     args.outdir=args.outdir.rstrip('/')
+    
     nn(args)
 
 if __name__ == '__main__':

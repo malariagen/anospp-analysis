@@ -35,13 +35,20 @@ def plot_target_balance(hap_df):
 
     logging.info('plotting targets balance')
 
-    reads_per_sample_target = hap_df.groupby(['sample_id','target'], observed=False)['reads'].sum().reset_index()
+    reads_per_sample_target = hap_df \
+        .groupby(['sample_id','target'], observed=False)['reads'].sum().reset_index()
     
     figsize = (hap_df['target'].nunique() * 0.3, 6)
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    sns.stripplot(data=reads_per_sample_target,
-        x = 'target', y = 'reads', hue = 'target', 
-        alpha = .1, jitter = .3, ax = ax)
+    sns.stripplot(
+        data=reads_per_sample_target,
+        x = 'target',
+        y = 'reads',
+        hue = 'target',
+        alpha = .1,
+        jitter = .3,
+        ax = ax
+        )
     # ax.get_legend().remove()
     ax.set_yscale('log')
     # ax.set_ylim(bottom=0.5)
@@ -60,8 +67,12 @@ def plot_allele_balance(hap_df):
     is_het = (hap_df.reads_fraction < 1)
     het_frac = hap_df[is_het].reads_fraction
     het_reads_log = hap_df[is_het].reads.apply(lambda x: np.log10(x))
-    het_plot = sns.jointplot(x=het_frac, y=het_reads_log, 
-        kind="hist", height=8)
+    het_plot = sns.jointplot(
+        x=het_frac,
+        y=het_reads_log,
+        kind="hist",
+        height=8
+        )
     het_plot.ax_joint.set_ylabel('reads (log10)')
     het_plot.ax_joint.set_xlabel('allele fraction')
     het_plot.ax_joint.axhline(1, c='silver', alpha=.5)
@@ -80,7 +91,8 @@ def plot_sample_target_heatmap(hap_df, samples_df, col):
         values=col, 
         index='target', 
         columns='sample_id', 
-        aggfunc=np.max).fillna(0)
+        aggfunc=np.max
+        ).fillna(0)
     
     if col == 'total_reads':
         st_df = np.log10(st_df.astype(float).replace(0, .1))
@@ -94,13 +106,15 @@ def plot_sample_target_heatmap(hap_df, samples_df, col):
         plate_samples = samples_df.loc[samples_df['plate_id'] == plate, 'sample_id']
         plot_df = st_df.reindex(columns=plate_samples, fill_value=0)
         max_int = plot_df.max().max().astype(int) + 1
-        sns.heatmap(plot_df, 
-                    cmap='coolwarm', 
-                    center=2, 
-                    linewidths=.5, 
-                    linecolor='silver', 
-                    ax=ax, 
-                    cbar_kws={'ticks':range(max_int)})
+        sns.heatmap(
+            plot_df, 
+            cmap='coolwarm', 
+            center=2, 
+            linewidths=.5, 
+            linecolor='silver', 
+            ax=ax, 
+            cbar_kws={'ticks':range(max_int)}
+            )
         ax.set_title(plate)
     plt.tight_layout()
 
@@ -126,15 +140,21 @@ def plot_sample_filtering(comb_stats_df):
     
     plates = comb_stats_df.plate_id.unique()
     nplates = len(plates)
-    fig, axs = plt.subplots(nplates,1,figsize=(20, 4 * nplates))
+    fig, axs = plt.subplots(nplates, 1, figsize=(20, 4 * nplates))
     for plate, ax in zip(plates, axs):
         plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy()
         plot_df['well_id'] = well_ordering(plot_df['well_id'])
         plot_df.sort_values(by='well_id', inplace=True)
         for i, col in enumerate(dada2_cols.keys()):
-            sns.barplot(x='sample_id', y=col, data=plot_df, 
-                        color=sns.color_palette()[i], ax=ax,
-                        label=dada2_cols[col], width=1)
+            sns.barplot(
+                x='sample_id',
+                y=col,
+                data=plot_df,
+                color=sns.color_palette()[i],
+                ax=ax,
+                label=dada2_cols[col],
+                width=1
+                )
         ax.set_xticks(range(plot_df.shape[0]))
         ax.set_xticklabels(plot_df['sample_name'])
         ax.set_xlabel('sample_name')
@@ -155,37 +175,43 @@ def plot_plate_stats(comb_stats_df, lims_plate=False):
     logging.info('plotting plate stats')
     
     fig, axs = plt.subplots(3,1, figsize=(10,15))
-    sns.stripplot(data=comb_stats_df,
-                y='target_reads',
-                x=plate_col,
-                hue=plate_col,
-                alpha=.3,
-                jitter=.35,
-                ax=axs[0])
+    sns.stripplot(
+        data=comb_stats_df,
+        y='target_reads',
+        x=plate_col,
+        hue=plate_col,
+        alpha=.3,
+        jitter=.35,
+        ax=axs[0]
+        )
     axs[0].set_yscale('log')
     axs[0].set_ylim(bottom=1)
     # 1000 reads cutoff
     axs[0].axhline(1000, c='silver', alpha=.5)
     axs[0].set_xticklabels([])
-    sns.stripplot(data=comb_stats_df,
-                y='targets_recovered',
-                x=plate_col,
-                hue=plate_col,
-                alpha=.3,
-                jitter=.35,
-                ax=axs[1])
+    sns.stripplot(
+        data=comb_stats_df,
+        y='targets_recovered',
+        x=plate_col,
+        hue=plate_col,
+        alpha=.3,
+        jitter=.35,
+        ax=axs[1]
+        )
 
     axs[1].set_ylim(bottom=0, top=62)
     # 30 targets cutoff
     axs[1].axhline(30, c='silver', alpha=.5)
     axs[1].set_xticklabels([])
-    sns.stripplot(data=comb_stats_df,
-                y='overall_filter_rate',
-                x=plate_col,
-                hue=plate_col,
-                alpha=.3,
-                jitter=.35,
-                ax=axs[2])
+    sns.stripplot(
+        data=comb_stats_df,
+        y='overall_filter_rate',
+        x=plate_col,
+        hue=plate_col,
+        alpha=.3,
+        jitter=.35,
+        ax=axs[2]
+        )
     axs[2].set_ylim(bottom=0, top=1)
     # 50% filtering cutoff
     axs[2].axhline(.5, c='silver', alpha=.5)
@@ -210,7 +236,8 @@ def plot_plate_summaries(comb_stats_df, lims_plate=False):
     plates = comb_stats_df[plate_col].unique()
     nplates = comb_stats_df[plate_col].nunique()
 
-    sum_df = comb_stats_df.groupby(plate_col)[['over 1000 mosquito reads', 'over 30 targets','over 50% reads retained']].sum()
+    sum_df = comb_stats_df.groupby(plate_col) \
+        [['over 1000 mosquito reads', 'over 30 targets','over 50% reads retained']].sum()
     y = comb_stats_df.groupby(plate_col)['over 1000 mosquito reads'].count()
     sum_df = sum_df.divide(y, axis=0).reindex(plates)
 
@@ -229,12 +256,14 @@ def plot_sample_success(comb_stats_df, anospp=True):
 
     fig, axs = plt.subplots(1,2,figsize=(12,6))
     for ycol, ax in zip(('raw_mosq_reads', 'overall_filter_rate'), axs):
-        sns.scatterplot(data=comb_stats_df,
-                x=xcol,
-                y=ycol,
-                hue='plate_id',
-                alpha=.5, 
-                ax=ax)
+        sns.scatterplot(
+            data=comb_stats_df,
+            x=xcol,
+            y=ycol,
+            hue='plate_id',
+            alpha=.5, 
+            ax=ax
+            )
         ax.set_xlim(left=0)
         if anospp:
             ax.axvline(30, c='silver', alpha=.5)
@@ -256,15 +285,23 @@ def plot_plasm_balance(comb_stats_df):
                           comb_stats_df.P2_reads.max())
 
     fig, ax = plt.subplots(1,1,figsize=(5,5))
-    sns.scatterplot(data=comb_stats_df,
-                    x='P1_reads',
-                    y='P2_reads',
-                    hue='plate_id',
-                    alpha=.5, 
-                    ax=ax)
+    sns.scatterplot(
+        data=comb_stats_df,
+        x='P1_reads',
+        y='P2_reads',
+        hue='plate_id',
+        alpha=.5, 
+        ax=ax
+        )
     ax.axhline(10, c='silver', alpha=.5)
     ax.axvline(10, c='silver', alpha=.5)
-    ax.plot([0.9, max_plasm_reads], [0.9, max_plasm_reads], color='silver', linestyle='dashed', alpha=.5)
+    ax.plot(
+        [0.9, max_plasm_reads],
+        [0.9, max_plasm_reads],
+        color='silver',
+        linestyle='dashed',
+        alpha=.5
+        )
     ax.set_yscale('log')
     ax.set_xscale('log')
 
@@ -341,7 +378,7 @@ def qc(args):
     fig = plot_allele_balance(hap_df)
     fig.savefig(f'{args.outdir}/allele_balance.png')
 
-    # deactivated as unused
+    # deactivated as unused and too big plot
     # for col in ('nalleles','total_reads'):
     #     fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col=col)
     #     fig.savefig(f'{args.outdir}/sample_target_{col}.png')
@@ -405,7 +442,7 @@ def qc(args):
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = 1
                 heatmap_kwargs['fmt'] = '.2f'
-            # read counts
+            # read counts expected in all other cases
             else:
                 # log-transform colour axis
                 # vmin vmax set here
@@ -420,7 +457,8 @@ def qc(args):
                 comb_stats_df,
                 col=col,
                 lims_plate=lims_plate,
-                **heatmap_kwargs)
+                **heatmap_kwargs
+                )
             if lims_plate:
                 plate_hm_fn  = f'{args.outdir}/lims_plate_hm_{col}.png' 
             else:
@@ -435,13 +473,16 @@ def main():
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
-    parser.add_argument('-s', '--stats', help='overall_summary.txt file from ampliseq pipeline or DADA2 stats tsv file', required=True)
+    parser.add_argument('-s', '--stats', 
+                        help='overall_summary.txt file from ampliseq pipeline or DADA2 stats tsv file',
+                        required=True)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='qc')
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
     args = parser.parse_args()
     args.outdir=args.outdir.rstrip('/')
+    
     qc(args)
 
 if __name__ == '__main__':

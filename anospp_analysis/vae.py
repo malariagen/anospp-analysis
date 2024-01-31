@@ -27,34 +27,31 @@ def prep_reference_index(reference_version, path_to_refversion):
 
     reference_path = f'{path_to_refversion}/{reference_version}/'
 
-    assert os.path.isdir(reference_path), f'reference version {reference_version} does not \
-        exist at {reference_path}'
+    assert os.path.isdir(reference_path), \
+        f'reference version {reference_version} does not exist at {reference_path}'
 
-    assert os.path.isfile(f'{reference_path}/selection_criteria.txt'), f'reference version \
-        {reference_version} at {reference_path} does not contain required \
-        selection_criteria.txt file'
+    assert os.path.isfile(f'{reference_path}/selection_criteria.txt'), \
+        f'reference version {reference_version} at {reference_path} does not contain required selection_criteria.txt file'
     selection_criteria_file = f'{reference_path}/selection_criteria.txt'
 
-    assert os.path.isfile(f'{reference_path}/_weights.hdf5'), f'reference version \
-        {reference_version} at {reference_path} does not contain required \
-        _weights.hdf5 file'
+    assert os.path.isfile(f'{reference_path}/_weights.hdf5'), \
+        f'reference version {reference_version} at {reference_path} does not contain required _weights.hdf5 file'
     vae_weights_file = f'{reference_path}/_weights.hdf5'
 
-    assert os.path.isfile(f'{reference_path}/convex_hulls.tsv'), f'reference version \
-        {reference_version} at {reference_path} does not contain required \
-        convex_hulls.tsv file'
+    assert os.path.isfile(f'{reference_path}/convex_hulls.tsv'), \
+        f'reference version {reference_version} at {reference_path} does not contain required convex_hulls.tsv file'
     convex_hulls_df = pd.read_csv(f'{reference_path}/convex_hulls.tsv', sep='\t')
 
     if not os.path.isfile(f'{reference_path}/colors.tsv'):
-            logging.warning('No colors defined for plotting.')
-            colorsdict = dict()
+        logging.warning('No colors defined for plotting.')
+        colorsdict = dict()
     else:
         colors = pd.read_csv(f'{reference_path}/colors.tsv',sep='\t', index_col=0)
         colorsdict = dict(colors.color)
 
     if not os.path.isfile(f'{reference_path}/latent_coordinates.tsv'):
-            logging.warning('No reference coordinates defined for plotting.')
-            ref_coord = pd.DataFrame()
+        logging.warning('No reference coordinates defined for plotting.')
+        ref_coord = pd.DataFrame()
     else:
         ref_coord = pd.read_csv(f'{reference_path}/latent_coordinates.tsv',sep='\t')
 
@@ -63,12 +60,10 @@ def prep_reference_index(reference_version, path_to_refversion):
             for line in fn:
                 version_name = line.strip()
     else:
-        logging.warning(f'No version.txt file present for reference version {reference_version} \
-                        at {reference_path}')
+        logging.warning(f'No version.txt file present for reference version {reference_version} at {reference_path}')
         version_name = 'unknown'
         
-    return (selection_criteria_file, vae_weights_file, convex_hulls_df, colorsdict, \
-        ref_coord, version_name)
+    return (selection_criteria_file, vae_weights_file, convex_hulls_df, colorsdict, ref_coord, version_name)
 
 def read_selection_criteria(selection_criteria_file, comb_stats_df, hap_df):
     
@@ -81,8 +76,10 @@ def select_samples(comb_stats_df, hap_df, level, sgp, n_targets):
     Based on NN assignment and number of targets
     '''
     #identify samples meeting selection criteria
-    vae_samples = comb_stats_df.loc[(comb_stats_df[f'res_{level}'] == sgp) & \
-                        (comb_stats_df['mosq_targets_recovered'] >= n_targets), 'sample_id']
+    vae_samples = comb_stats_df.loc[
+        (comb_stats_df[f'res_{level}'] == sgp) & (comb_stats_df['mosq_targets_recovered'] >= n_targets), 
+        'sample_id'
+        ]
     #subset haplotype df
     vae_hap_df = hap_df.query('sample_id in @vae_samples')
     
@@ -127,8 +124,9 @@ def prep_kmers(vae_hap_df, vae_samples, k):
 
     #fill in table for samples
     for n, sample in enumerate(vae_samples):
-        parsed_seqids = parse_seqids_series(vae_hap_df.loc[vae_hap_df.sample_id == sample, 
-                                                           'seqid'])
+        parsed_seqids = parse_seqids_series(
+            vae_hap_df.loc[vae_hap_df.sample_id == sample, 'seqid']
+            )
         kmers_samples[n,:] = prep_sample_kmer_table(kmers_unique_seqs, parsed_seqids)
 
     return(kmers_samples)
@@ -137,8 +135,12 @@ def latent_space_sampling(args):
     
     #Add noise to encoder output
     z_mean, z_log_var = args
-    epsilon = keras.backend.random_normal(shape=(keras.backend.shape(z_mean)[0], LATENTDIM),
-                                          mean=0, stddev=1., seed=SEED)
+    epsilon = keras.backend.random_normal(
+        shape=(keras.backend.shape(z_mean)[0], LATENTDIM),
+        mean=0, 
+        stddev=1., 
+        seed=SEED
+        )
     
     return z_mean + keras.backend.exp(z_log_var) * epsilon
 
@@ -150,24 +152,27 @@ def define_vae_input(k):
 def define_encoder(k):
     input_seq = define_vae_input(k)
     x = keras.layers.Dense(WIDTH, activation = 'elu')(input_seq)
-    for i in range(DEPTH-1):
+    for i in range(DEPTH - 1):
         x = keras.layers.Dense(WIDTH, activation = 'elu')(x)
     z_mean = keras.layers.Dense(LATENTDIM)(x)
     z_log_var = keras.layers.Dense(LATENTDIM)(x)
-    z = keras.layers.Lambda(latent_space_sampling, output_shape=(LATENTDIM,), \
-                            name = 'z')([z_mean, z_log_var])
-    encoder = keras.models.Model(input_seq, [z_mean,z_log_var,z], name = 'encoder')
+    z = keras.layers.Lambda(
+        latent_space_sampling, 
+        output_shape=(LATENTDIM,),
+        name = 'z'
+        )([z_mean, z_log_var])
+    encoder = keras.models.Model(input_seq, [z_mean, z_log_var, z], name = 'encoder')
 
     return encoder
 
 def define_decoder(k):
     #Check whether you need the layer part here
     decoder_input = keras.layers.Input(shape=(LATENTDIM,), name='ls_sampling')
-    x = keras.layers.Dense(WIDTH, activation = "linear")(decoder_input)
-    for i in range(DEPTH-1):
-        x = keras.layers.Dense(WIDTH, activation = "elu")(x)
-    output = keras.layers.Dense(4**k, activation = "softplus")(x)
-    decoder=keras.models.Model(decoder_input, output, name = 'decoder')
+    x = keras.layers.Dense(WIDTH, activation='linear')(decoder_input)
+    for i in range(DEPTH - 1):
+        x = keras.layers.Dense(WIDTH, activation='elu')(x)
+    output = keras.layers.Dense(4**k, activation='softplus')(x)
+    decoder = keras.models.Model(decoder_input, output, name='decoder')
 
     return decoder
 
@@ -191,11 +196,13 @@ def predict_latent_pos(kmer_table, vae_samples, k, vae_weights_file):
     vae.load_weights(vae_weights_file)
     predicted_latent_pos = encoder.predict(kmer_table)
 
-    predicted_latent_pos_df = pd.DataFrame(index=vae_samples, columns=['mean1', 'mean2', 'mean3',\
-                                                                       'sd1', 'sd2', 'sd3'])
+    predicted_latent_pos_df = pd.DataFrame(
+        index=vae_samples, 
+        columns=['mean1', 'mean2', 'mean3', 'sd1', 'sd2', 'sd3']
+        )
     for i in range(3):
-        predicted_latent_pos_df[f'mean{i+1}'] = predicted_latent_pos[0][:,i]
-        predicted_latent_pos_df[f'sd{i+1}'] = predicted_latent_pos[1][:,i]
+        predicted_latent_pos_df[f'mean{i + 1}'] = predicted_latent_pos[0][:,i]
+        predicted_latent_pos_df[f'sd{i + 1}'] = predicted_latent_pos[1][:,i]
 
     return predicted_latent_pos_df
 
@@ -206,8 +213,10 @@ def generate_convex_hulls(convex_hulls_df):
     logging.info('setting up convex hulls from reference database')
     hull_dict = dict()
     for species in convex_hulls_df.species.unique():
-        pos = convex_hulls_df.loc[convex_hulls_df.species==species, ['mean1', 'mean2', \
-                                                                     'mean3']].values
+        pos = convex_hulls_df.loc[
+            convex_hulls_df.species==species, 
+            ['mean1', 'mean2', 'mean3']
+            ].values
         hull = ConvexHull(pos)
         hull_dict[species] = (pos, hull)
 
@@ -235,9 +244,9 @@ def find_normal_edge_simplex(a, b, c):
     #centered on a
     z = np.cross(b - a, c - a)
     #normalised
-    u = z/np.sqrt(np.dot(z, z))
+    u = z / np.sqrt(np.dot(z, z))
     #the edge ab normalised and centered on a
-    e = (b - a)/np.sqrt(np.dot(b - a, b - a))
+    e = (b - a) / np.sqrt(np.dot(b - a, b - a))
     #the unit normal of plane C
     n = np.cross(u, e)
     
@@ -251,9 +260,9 @@ def check_edge_projection(p, v, w):
     #through v
     e = w - v
     #length of vw
-    le = np.sqrt(np.dot(e,e))
+    le = np.sqrt(np.dot(e, e))
     #unit vector along the edge, centered on v
-    n = e/le
+    n = e / le
     #project p along the edge vw
     q = np.dot(p - v, n)
     
@@ -270,10 +279,10 @@ def check_edge_partition(p, vertices):
     #and the lenght l of the edge
     q, l = check_edge_projection(p, v, w)
     
-    if q<0:
+    if q < 0:
         #vertex v is closest
         return compute_distance_to_vertex(p, v)
-    elif q>l:
+    elif q > l:
         #vertex w is closest
         return compute_distance_to_vertex(p, w)
     else:
@@ -310,7 +319,7 @@ def check_vertex_partition(p, v, verts):
     else:
         #vertex v is closest
         return compute_distance_to_vertex(p, v)
-   
+
 def compute_distance_to_plane(p, vertices):
     '''
     compute distance point p to the plane defined 
@@ -319,9 +328,9 @@ def compute_distance_to_plane(p, vertices):
     a, b, c = vertices
     #find a vector perpendicular to the simplex
     #centered on a
-    z = np.cross(b-a, c-a)
+    z = np.cross(b - a, c - a)
     #unit vector perpendicular to the plane
-    u = z/np.sqrt(np.dot(z, z))
+    u = z / np.sqrt(np.dot(z, z))
     #distance of p to the plane
     h = np.abs(np.dot(p - a, u))
     
@@ -343,9 +352,9 @@ def compute_distance_to_edge(p, v, w):
     #through v
     e = w - v
     #let n be unit vector along the edge
-    n = e/np.sqrt(np.dot(e,e))
+    n = e / np.sqrt(np.dot(e, e))
     #let q be the projection of p along the edge vw
-    q = np.dot(p - v, n)*n
+    q = np.dot(p - v, n) * n
     #distance is the length of the difference between p and q
     d = np.sqrt(np.dot(p - v - q, p - v - q))
     
@@ -360,9 +369,9 @@ def compute_distance_to_simplex(p, vertices):
     
     #get normal vectors to the planes containing the 
     #edges of the triangles and perpendicular to the simplex
-    Cn, Co = find_normal_edge_simplex(a,b,c)
-    Bn, Bo = find_normal_edge_simplex(c,a,b)
-    An, Ao = find_normal_edge_simplex(b,c,a)
+    Cn, Co = find_normal_edge_simplex(a, b, c)
+    Bn, Bo = find_normal_edge_simplex(c, a, b)
+    An, Ao = find_normal_edge_simplex(b, c, a)
     
     #for each of the edge planes, check whether p lies
     #in the same halfplane of the simplex
@@ -382,8 +391,10 @@ def compute_distance_to_simplex(p, vertices):
         #p lies in a part bordering a vertex
         return check_vertex_partition(p, vertices[partition][0], vertices[~partition])
     else:
-        logging.error("Something thought to be impossible happened in the convex hull computation - \
-        tell Marilou to retake her linear algebra exam")
+        logging.error(
+            'Something thought to be impossible happened in the convex hull computation - '
+            'tell Marilou to retake her linear algebra exam'
+            )
 
 def compute_distance_to_hull(hull, positions):
     '''
@@ -395,7 +406,7 @@ def compute_distance_to_hull(hull, positions):
     dists = np.zeros((positions.shape[0], hull.simplices.shape[0]))
     for i, s in enumerate(hull.simplices):
         #compute distance to each simplex in turn
-        dists[:,i] = np.array([compute_distance_to_simplex(p, hull.points[s]) for p in positions])
+        dists[:, i] = np.array([compute_distance_to_simplex(p, hull.points[s]) for p in positions])
     #get the distance to the closest simplex for each point
     distances = dists.min(axis=1)
 
@@ -408,7 +419,7 @@ def check_is_in_hull(hull_pos, positions):
     if not isinstance(hull_pos,Delaunay):
         hull = Delaunay(hull_pos)
 
-    in_hull = hull.find_simplex(positions)>=0
+    in_hull = hull.find_simplex(positions) >= 0
 
     return in_hull
 
@@ -420,7 +431,7 @@ def get_unassigned_samples(latent_positions_df):
 def generate_hull_dist_df(hull_dict, latent_positions_df, unassigned):
 
     dist_df = pd.DataFrame(index=unassigned)
-    positions = latent_positions_df.loc[unassigned,['mean1','mean2','mean3']].values
+    positions = latent_positions_df.loc[unassigned ,['mean1', 'mean2', 'mean3']].values
     for species in hull_dict.keys():
         dist_df[species] = compute_distance_to_hull(hull_dict[species][1], positions)
     return dist_df 
@@ -437,16 +448,19 @@ def get_closest_hulls(hull_dict, latent_positions_df, unassigned):
 
 def assign_gam_col_band(latent_positions_df, summary_dist_df):
     #Determine which samples are in gamcol band
-    gamcol_band = summary_dist_df.loc[(summary_dist_df.species1.isin(['Anopheles_gambiae', \
-                            'Anopheles_coluzzii'])) & (summary_dist_df.species2.isin([\
-                            'Anopheles_gambiae', 'Anopheles_coluzzii'])) & \
-                            (summary_dist_df.dist2<14)].copy()
+    gamcol_band = summary_dist_df.loc[
+        (summary_dist_df.species1.isin(['Anopheles_gambiae', 'Anopheles_coluzzii'])) & \
+        (summary_dist_df.species2.isin(['Anopheles_gambiae', 'Anopheles_coluzzii'])) & \
+        (summary_dist_df.dist2 < 14)
+        ].copy()
     #Make assignments for the samples in gamcol band
-    if gamcol_band.shape[0]>0:
-        gamcol_dict = dict(gamcol_band.apply(lambda row: 'Uncertain_'+row.species1.split('_')[1]+\
-                                             '_'+row.species2.split('_')[1], axis=1))
+    if gamcol_band.shape[0] > 0:
+        gamcol_dict = dict(gamcol_band.apply(
+            lambda row: 'Uncertain_' + row.species1.split('_')[1] + '_' + row.species2.split('_')[1],
+            axis=1))
         latent_positions_df.loc[gamcol_band.index, 'VAE_species'] = latent_positions_df.loc[\
-            gamcol_band.index].index.map(gamcol_dict)
+            gamcol_band.index
+            ].index.map(gamcol_dict)
     return latent_positions_df, gamcol_band.shape[0]
 
 def assign_to_closest_hull(latent_positions_df, summary_dist_df, unassigned):
@@ -454,12 +468,15 @@ def assign_to_closest_hull(latent_positions_df, summary_dist_df, unassigned):
     Assign samples that are much closer to one hull than to all others to that hull
     Currently defined as a distance 7 times smaller than all others
     '''
-    fuzzy_hulls = summary_dist_df.loc[(DISTRATIO*summary_dist_df.dist1 < \
-        summary_dist_df.dist2)&(summary_dist_df.index.isin(unassigned))].copy()
-    if fuzzy_hulls.shape[0]>0:
+    fuzzy_hulls = summary_dist_df.loc[
+        (DISTRATIO*summary_dist_df.dist1 < summary_dist_df.dist2) & \
+        summary_dist_df.index.isin(unassigned)
+        ].copy()
+    if fuzzy_hulls.shape[0] > 0:
         fuzzy_hulls_dict = dict(fuzzy_hulls.species1)
-        latent_positions_df.loc[unassigned, 'VAE_species'] = latent_positions_df.loc[\
-            unassigned].index.map(fuzzy_hulls_dict)
+        latent_positions_df.loc[unassigned, 'VAE_species'] = latent_positions_df.loc[
+            unassigned
+            ].index.map(fuzzy_hulls_dict)
     return latent_positions_df, fuzzy_hulls.shape[0]
 
 def assign_to_multiple_hulls(latent_positions_df, dist_df, unassigned):
@@ -467,11 +484,16 @@ def assign_to_multiple_hulls(latent_positions_df, dist_df, unassigned):
     Assign samples in between hulls to multiple hulls in order of closeness
     '''
     between_hulls = dist_df.loc[dist_df.index.isin(unassigned)].copy()
-    between_hulls_dict = dict(between_hulls.apply(lambda row: 'Uncertain_'+'_'.join(\
-        label.split('_')[1] for label in row.sort_values().index[row.sort_values()<\
-                                                            DISTRATIO*row.min()]), axis=1))
-    latent_positions_df.loc[unassigned, 'VAE_species'] = latent_positions_df.loc[\
-        unassigned].index.map(between_hulls_dict)
+    between_hulls_dict = dict(between_hulls.apply(
+        lambda row: 'Uncertain_'+'_'.join(
+            label.split('_')[1] for label in row.sort_values().index[
+                row.sort_values() < DISTRATIO * row.min()
+                ]
+            ),
+        axis=1))
+    latent_positions_df.loc[unassigned, 'VAE_species'] = latent_positions_df.loc[
+        unassigned
+        ].index.map(between_hulls_dict)
     return latent_positions_df, between_hulls.shape[0]
 
 def perform_convex_hull_assignments(hull_dict, latent_positions_df):
@@ -488,26 +510,39 @@ def perform_convex_hull_assignments(hull_dict, latent_positions_df):
     
     #Record unassigned samples 
     unassigned, n_unassigned = get_unassigned_samples(latent_positions_df)
-    logging.info(f'{latent_positions_df.shape[0] - n_unassigned} samples fall inside convex hulls; \
-{n_unassigned} samples still to be assigned')
+    logging.info(
+        f'{latent_positions_df.shape[0] - n_unassigned} samples fall inside convex hulls; '
+        f'{n_unassigned} samples still to be assigned'
+        )
     
     #for the unassigned samples, get distances to two closest hulls
     if n_unassigned > 0:
         summary_dist_df, dist_df = get_closest_hulls(hull_dict, latent_positions_df, unassigned)
-        latent_positions_df, n_newly_assigned = assign_gam_col_band(latent_positions_df, \
-                                                                    summary_dist_df)
+        latent_positions_df, n_newly_assigned = assign_gam_col_band(
+            latent_positions_df, 
+            summary_dist_df
+            )
         unassigned, n_unassigned = get_unassigned_samples(latent_positions_df)
-        logging.info(f'{n_newly_assigned} samples assigned to uncertain_gambiae_coluzzii or \
-uncertain_coluzzii_gambiae; {n_unassigned} samples still to be assigned')
+        logging.info(
+            f'{n_newly_assigned} samples assigned to uncertain_gambiae_coluzzii or uncertain_coluzzii_gambiae; '
+            f'{n_unassigned} samples still to be assigned'
+            )
     if n_unassigned > 0:
-        latent_positions_df, n_newly_assigned = assign_to_closest_hull(latent_positions_df, \
-                                                                summary_dist_df, unassigned)
+        latent_positions_df, n_newly_assigned = assign_to_closest_hull(
+            latent_positions_df, 
+            summary_dist_df, 
+            unassigned
+            )
         unassigned, n_unassigned = get_unassigned_samples(latent_positions_df)
-        logging.info(f'{n_newly_assigned} additional samples assigned to a single species; \
-{n_unassigned} samples still to be assigned')
+        logging.info(
+            f'{n_newly_assigned} additional samples assigned to a single species; '
+            f'{n_unassigned} samples still to be assigned')
     if n_unassigned > 0:
-        latent_positions_df, n_newly_assigned = assign_to_multiple_hulls(latent_positions_df,\
-                                                                        dist_df, unassigned)
+        latent_positions_df, n_newly_assigned = assign_to_multiple_hulls(
+            latent_positions_df,
+            dist_df, 
+            unassigned
+            )
         logging.info(f'{n_newly_assigned} samples assigned to multiple hulls.')
     logging.info(f'finished assigning {latent_positions_df.shape[0]} samples')
 
@@ -530,26 +565,38 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict):
         else:
             multi.append(key)
 
-    fig, ax = plt.subplots(figsize=(8,8))
+    fig, ax = plt.subplots(figsize=(8, 8))
 
     #Plot reference dataset
     ref_coordinates['color'] = ref_coordinates.VAE_species.map(colordict)
-    ax.scatter(ref_coordinates.mean1, ref_coordinates.mean3, \
-               c=ref_coordinates.color.values, alpha=.6, zorder=1)
+    ax.scatter(
+        ref_coordinates.mean1, 
+        ref_coordinates.mean3, 
+        c=ref_coordinates.color.values, 
+        alpha=.6, 
+        zorder=1
+        )
     
-    if len(single)>0:
-        #Plot samples assigned to single species
+    #Plot samples assigned to single species
+    if len(single) > 0:
         for species in single:
             sub = ch_assignments.query('VAE_species == @species')
-            if species=='Anopheles_bwambae-fontenillei':
-                label= f'Anopheles_bwambae-\nfontenillei: {species_dict[species]}'
+            if species == 'Anopheles_bwambae-fontenillei':
+                label = f'Anopheles_bwambae-\nfontenillei: {species_dict[species]}'
             else:
                 label = f'{species}: {species_dict[species]}'
-            ax.scatter(sub.mean1, sub.mean3, color=colordict[species], marker='^', \
-                   edgecolor='k', label=label, zorder=2)
+            ax.scatter(
+                sub.mean1, 
+                sub.mean3, 
+                color=colordict[species], 
+                marker='^', 
+                edgecolor='k', 
+                label=label, 
+                zorder=2
+                )
 
+    #Plot samples assigned to two species
     if len(double)>0:    
-        #Plot samples assigned to two species
         for species in double:
             sub = ch_assignments.query('VAE_species == @species')
             _, sp1, sp2 = species.split('_')
@@ -558,14 +605,28 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict):
                 label = f'Uncertain_bwambae-\nfontenillei_{sp2}: {species_dict[species]}'
             else:
                 label = f'Uncertain_{sp1}_\n{sp2}: {species_dict[species]}'
-            ax.scatter(sub.mean1, sub.mean3, marker='s', edgecolor=colordict[f'Anopheles_{sp1}'], \
-                   facecolor=colordict[f'Anopheles_{sp2}'], linewidth=1.5, zorder=2, label=label)
+            ax.scatter(
+                sub.mean1, 
+                sub.mean3, 
+                marker='s', 
+                edgecolor=colordict[f'Anopheles_{sp1}'], 
+                facecolor=colordict[f'Anopheles_{sp2}'], 
+                linewidth=1.5, 
+                zorder=2, 
+                label=label
+                )
 
+    #Plot remaining samples
     if len(multi)>0:    
-        #Plot remaining samples:
         sub = ch_assignments.query('VAE_species in @multi')
-        ax.scatter(sub.mean1, sub.mean3, color='k', marker='s', zorder=3, \
-                   label=f'other: {sub.shape[0]}')
+        ax.scatter(
+            sub.mean1, 
+            sub.mean3,
+            color='k', 
+            marker='s', 
+            zorder=3, 
+            label=f'other: {sub.shape[0]}'
+            )
 
     ax.set_xlabel('LS1')
     ax.set_ylabel('LS3')
@@ -575,11 +636,12 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict):
     return fig, ax
 
 def generate_summary(ch_assignments, comb_stats_df, version_name):
-    summary = []
-    summary.append(f'Convex hull assignment assignment using reference version {version_name}')
-    summary.append(f'On run containing {comb_stats_df.sample_id.nunique()} samples')
-    summary.append(f'{ch_assignments.index.nunique()} samples met the VAE selection criteria')
-    summary.append(f'Samples are assigned to the following labels:')
+    summary = [
+        f'Convex hull assignment assignment using reference version {version_name}',
+        f'On run containing {comb_stats_df.sample_id.nunique()} samples',
+        f'{ch_assignments.index.nunique()} samples met the VAE selection criteria',
+        f'Samples are assigned to the following labels:'
+    ]
     assignment_dict = dict(ch_assignments.groupby('VAE_species').size())
     for key in assignment_dict.keys():
         summary.append(f'{key}:\t {assignment_dict[key]}')
@@ -600,11 +662,16 @@ def vae(args):
 
     selection_criteria_file, vae_weights_file, convex_hulls_df, colordict, ref_coordinates, \
         version_name = prep_reference_index(args.reference_version, args.path_to_refversion)
-    vae_samples, vae_hap_df = read_selection_criteria(selection_criteria_file,\
-                                 comb_stats_df, hap_df)
+    vae_samples, vae_hap_df = read_selection_criteria(
+        selection_criteria_file,
+        comb_stats_df, 
+        hap_df
+        )
     if len(vae_samples) == 0:
-        logging.info("No samples to be run through VAE - skipping to finalising assignments")
-        ch_assignment_df = pd.DataFrame(columns = ['mean1','mean2','mean3','sd1','sd2','sd3','VAE_species'])
+        logging.info('No samples to be run through VAE - skipping to finalising assignments')
+        ch_assignment_df = pd.DataFrame(columns = [
+            'mean1', 'mean2', 'mean3', 'sd1', 'sd2', 'sd3', 'VAE_species'
+            ])
 
     else:
         kmer_table = prep_kmers(vae_hap_df, vae_samples, K)
@@ -612,7 +679,7 @@ def vae(args):
         hull_dict = generate_convex_hulls(convex_hulls_df)
         ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
         ch_assignment_df.to_csv(f'{args.outdir}/vae_assignment.tsv', sep='\t')
-        if not bool(args.no_plotting):
+        if not args.no_plotting:
             fig, _ = plot_VAE_assignments(ch_assignment_df, ref_coordinates, colordict)
             fig.savefig(f'{args.outdir}/vae_assignment.png')
 
@@ -626,23 +693,29 @@ def vae(args):
     
 def main():
     
-    parser = argparse.ArgumentParser("VAE assignment for samples in gambiae complex")
-    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file with errors removed \
-                        as generated by anospp-nn', required=True)
-    parser.add_argument('-m', '--manifest', help='Sample assignment tsv file as generated by\
-                        anospp-nn', required=True)
-    parser.add_argument('-r', '--reference_version', help='Reference index version - \
-                        currently a directory name. Default: gcrefv1', default='gcrefv1')
+    parser = argparse.ArgumentParser('VAE assignment for samples in gambiae complex')
+    parser.add_argument('-a', '--haplotypes',
+                        help='Haplotypes tsv file with errors removed as generated by anospp-nn',
+                        required=True)
+    parser.add_argument('-m', '--manifest',
+                        help='Sample assignment tsv file as generated by anospp-nn',
+                        required=True)
+    parser.add_argument('-r', '--reference_version',
+                        help='Reference index version - currently a directory name. Default: gcrefv1',
+                        default='gcrefv1')
     parser.add_argument('-o', '--outdir', help='Output directory. Default: vae', default='vae')
-    parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
-         Default: ref_databases', default='ref_databases')
-    parser.add_argument('--no_plotting', help='Do not generate plots. Default: False', \
-                        default=False)
+    parser.add_argument('-p', '--path_to_refversion', 
+                        help='Path to reference index version. Default: ref_databases', 
+                        default='ref_databases')
+    parser.add_argument('--no_plotting', 
+                        help='Do not generate plots. Default: False',
+                        action='store_true', default=False)
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
     args = parser.parse_args()
     args.outdir=args.outdir.rstrip('/')
+    
     vae(args)
 
 if __name__ == '__main__':
