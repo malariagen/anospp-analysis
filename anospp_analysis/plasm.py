@@ -257,6 +257,7 @@ def plasm(args):
 
     plasm_hap_df = hap_df[hap_df['target'].isin(PLASM_TARGETS)].copy()
 
+    ref_dir = f'{args.path_to_refversion}/{args.reference_version}'
     blastdb = f'{args.path_to_refversion}/{args.reference_version}/{args.blast_db_prefix}'
 
     blast_df = run_blast(
@@ -280,6 +281,15 @@ def plasm(args):
     sum_samples_df = summarise_samples(sum_hap_df, samples_df, filters=[args.filter_p1, args.filter_p2])
 
     sum_samples_df.to_csv(f'{args.outdir}/plasm_sample_summary.tsv', sep='\t')
+
+    if args.interactive_plotting:
+
+
+
+        for t in PLASM_TARGETS:
+            out_fn = f'{args.outdir}/spp_{t}_lims_plate.html'
+            title = 'Plasmodium species composition'
+            plot_plate_view(sum_samples_df, out_fn, t, ref_dir)
 
     logging.info('ANOSPP plasm complete')
 
@@ -319,8 +329,9 @@ def main():
     parser.add_argument('-g', '--filter_p2', 
                         help='Minimum read support for P2 haplotypes to be included in sample summary. Default: 10', 
                         default=10, type=int)
-    # parser.add_argument('-i', '--interactive_plotting', 
-    #                         help='do interactive plotting', action='store_true', default=False)
+    parser.add_argument('-i', '--interactive_plotting', 
+                        help='Create interactive plots of species composition across plates', 
+                        action='store_true', default=False)
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
