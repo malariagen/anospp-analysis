@@ -487,7 +487,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     # reverse legend order to match barplot order
     axs[0].legend(handles[::-1], labels[::-1], loc='upper left', bbox_to_anchor=(1,1), fontsize=14)
     # adding title in post - handling margins by savefig's bbox_inches='tight' at this point
-    axs[0].set_title(f'NN assignment {level_label} level for run {run_id}')
+    axs[0].set_title(f'NN assignment {level_label} level for run {run_id}', fontsize=20)
 
     return fig, axs
 
@@ -561,6 +561,7 @@ def nn(args):
     logging.info(f'writing assignment results to {args.outdir}')
     comb_stats_df[[
         'sample_id',
+        'run_id',
         'multiallelic_mosq_targets',
         'mosq_reads',
         'mosq_targets_recovered',
