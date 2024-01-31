@@ -253,7 +253,10 @@ def prep_samples(samples_fn):
     else:
         samples_df['sample_name'] = samples_df['sample_id']
 
-    return samples_df
+    # first run record assumed to be the run ID for plot titles
+    run_id = samples_df['run_id'].iloc[0]
+
+    return run_id, samples_df
 
 def prep_stats(stats_fn):
     '''
@@ -345,8 +348,9 @@ def combine_stats(stats_df, hap_df, samples_df):
     comb_stats_df.set_index('sample_id', inplace=True)
     
     comb_stats_df['target_reads'] = hap_df[hap_df.target != 'unknown'] \
-        .groupby('sample_id')['reads'].sum().fillna(0).astype(int)
-    
+        .groupby('sample_id')['reads'].sum()
+    comb_stats_df['target_reads'] = comb_stats_df['target_reads'].fillna(0).astype(int)
+
     comb_stats_df['overall_filter_rate'] = comb_stats_df['target_reads'] / comb_stats_df['total_reads']
 
     comb_stats_df['unassigned_asvs'] = hap_df[hap_df.target == 'unknown'] \

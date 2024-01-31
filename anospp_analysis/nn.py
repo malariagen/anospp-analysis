@@ -446,7 +446,7 @@ def generate_summary(comb_stats_df, version_name):
     ]
     return '\n'.join(summary)
 
-def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold):
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id):
     
     logging.info(f'generating {level_label} level plots')
     #Generate bar plots at given assignment level
@@ -486,6 +486,8 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     # add legend after adjusting layout so that it spans multiple subplots
     # reverse legend order to match barplot order
     axs[0].legend(handles[::-1], labels[::-1], loc='upper left', bbox_to_anchor=(1,1), fontsize=14)
+    # adding title in post - handling margins by savefig's bbox_inches='tight' at this point
+    axs[0].set_title(f'NN assignment {level_label} level for run {run_id}')
 
     return fig, axs
 
@@ -498,7 +500,7 @@ def nn(args):
     logging.info('ANOSPP NN data import started')
 
     hap_df = prep_hap(args.haplotypes)
-    samples_df = prep_samples(args.manifest)
+    run_id, samples_df = prep_samples(args.manifest)
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
@@ -574,14 +576,16 @@ def nn(args):
     with open(f'{args.outdir}/summary.txt', 'w') as fn:
         fn.write(summary_text)
 
-    if not bool(args.no_plotting):
+    if not args.no_plotting:
         for level in ['coarse', 'int', 'fine']:
             fig, _ = plot_assignment_proportions(
                 comb_stats_df, 
                 results_df[level], 
                 level, 
                 colors[level], 
-                args.nn_assignment_threshold)
+                args.nn_assignment_threshold,
+                run_id
+                )
             fig.savefig(f'{args.outdir}/{level}_assignment.png', bbox_inches='tight')
 
     logging.info('ANOSPP NN complete')
@@ -639,7 +643,7 @@ def main():
 
     args = parser.parse_args()
     args.outdir=args.outdir.rstrip('/')
-    
+
     nn(args)
 
 if __name__ == '__main__':

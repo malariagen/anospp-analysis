@@ -253,7 +253,7 @@ def plasm(args):
 
     logging.info('ANOSPP plasm data import started')
     hap_df = prep_hap(args.haplotypes)
-    samples_df = prep_samples(args.manifest)
+    run_id, samples_df = prep_samples(args.manifest)
 
     plasm_hap_df = hap_df[hap_df['target'].isin(PLASM_TARGETS)].copy()
 
@@ -283,13 +283,11 @@ def plasm(args):
     sum_samples_df.to_csv(f'{args.outdir}/plasm_sample_summary.tsv', sep='\t')
 
     if args.interactive_plotting:
-
-
-
         for t in PLASM_TARGETS:
+            logging.info(f'plotting interactive lims plate view for {t}')
             out_fn = f'{args.outdir}/spp_{t}_lims_plate.html'
-            title = 'Plasmodium species composition'
-            plot_plate_view(sum_samples_df, out_fn, t, ref_dir)
+            title = f'Plasmodium species composition run {run_id}, target {t}'
+            plot_plate_view(sum_samples_df, out_fn, t, ref_dir, title)
 
     logging.info('ANOSPP plasm complete')
 
