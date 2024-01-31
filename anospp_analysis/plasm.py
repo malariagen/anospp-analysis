@@ -14,18 +14,9 @@ import warnings
 from anospp_analysis.util import *
 from anospp_analysis.iplot import plot_plate_view
 
-# blast
-BLASTDB_PREFIX = 'plasmomito_P1P2_DB_v1.0'
 BLAST_COLS = 'qseqid sseqid slen qstart qend length mismatch gapopen gaps sseq pident evalue bitscore qcovs'
-# TODO check value against ref database
-SPECIES_ASSIGNMENT_PIDENT = 97
 
-# contamination estimation
-MIN_AFFECTED_SAMPLES = 4
-MAX_READS_AFFECTED_SAMPLE = 100
-MIN_READS_SOURCE_SAMPLE = 10000
-
-def run_blast(plasm_hap_df, outdir, path_to_refversion, reference_version, min_pident=SPECIES_ASSIGNMENT_PIDENT):
+def run_blast(plasm_hap_df, outdir, blastdb, min_pident):
 
     logging.info('running blast')
 
@@ -36,22 +27,13 @@ def run_blast(plasm_hap_df, outdir, path_to_refversion, reference_version, min_p
             output.write(f">{row['seqid']}\n")
             output.write(f"{row['consensus']}\n")
 
-    reference_path = f'{path_to_refversion}/{reference_version}/'
-
-    assert os.path.isdir(reference_path), f'reference version {reference_version} does not exist at {reference_path}'
-
-    assert os.path.isfile(f'{reference_path}/{BLASTDB_PREFIX}.ndb'), f'reference version {reference_version} at {reference_path} \
-        does not contain required {BLASTDB_PREFIX}.ndb file'
-
-    blastdb = f'{path_to_refversion}/{reference_version}/{BLASTDB_PREFIX}'
-
     # Run blast and capture the output
     cmd = (
-    f"blastn -db {blastdb} "
-    f"-query {outdir}/plasm_haps.fasta "
-    f"-out {outdir}/plasm_blastout.tsv "
-    f"-outfmt '6 {BLAST_COLS}' "
-    f"-word_size 5 -max_target_seqs 1 -evalue 0.01"
+        f"blastn -db {blastdb} "
+        f"-query {outdir}/plasm_haps.fasta "
+        f"-out {outdir}/plasm_blastout.tsv "
+        f"-outfmt '6 {BLAST_COLS}' "
+        f"-word_size 5 -max_target_seqs 1 -evalue 0.01"
         )
     process = subprocess.run(cmd, capture_output=True, text=True, shell=True)
 
@@ -95,13 +77,10 @@ def run_blast(plasm_hap_df, outdir, path_to_refversion, reference_version, min_p
 
     return blast_df
 
-def estimate_contamination(hap_df, sample_df, 
-                           min_samples=MIN_AFFECTED_SAMPLES, 
-                           min_source_reads=MIN_READS_SOURCE_SAMPLE, 
-                           max_target_reads=MAX_READS_AFFECTED_SAMPLE):
+def estimate_contamination(hap_df, sample_df, min_samples, min_source_reads, max_affected_reads):
     """
     Identify potential contamination from excessive haplotype sharing between
-    high coverage sample (source) and many low coverage samples (targets).
+    high coverage sample (source) and many low coverage samples (affected).
 
     Contamination is more likely between samples sharing plates or wells
     """
@@ -122,21 +101,21 @@ def estimate_contamination(hap_df, sample_df,
 
         # status - haplotype sharing
         if (hapid_df.reads > min_source_reads).any():
-            if (hapid_df.reads < max_target_reads).sum() > min_samples:
-                # source and target data
+            if (hapid_df.reads < max_affected_reads).sum() > min_samples:
+                # source and affected data
                 src_df = hapid_df.loc[hapid_df.reads > min_source_reads]
-                tgt_df = hapid_df.loc[hapid_df.reads < max_target_reads]
+                tgt_df = hapid_df.loc[hapid_df.reads < max_affected_reads]
                 # sample & hap define positions in original df
                 src_haps = (ext_hap_df.sample_id.isin(src_df['sample_id']) & (ext_hap_df.seqid == seqid))
                 tgt_haps = (ext_hap_df.sample_id.isin(tgt_df['sample_id']) & (ext_hap_df.seqid == seqid))
                 # set contamination statuses in original df
                 ext_hap_df.loc[(ext_hap_df.seqid == seqid), 'contamination_status'] = 'unclear'
                 ext_hap_df.loc[src_haps, 'contamination_status'] = 'source'
-                ext_hap_df.loc[tgt_haps, 'contamination_status'] = 'target'
+                ext_hap_df.loc[tgt_haps, 'contamination_status'] = 'affected'
                 # confidence - plate/well match
                 ext_hap_df.loc[tgt_haps, 'contamination_confidence'] = 'low'
                 for _, src_row in src_df.iterrows():
-                    # targets sharing plate or well with source
+                    # affected samples sharing plate or well with source
                     same_plate_tgt_samples = tgt_df.loc[tgt_df.plate_id == src_row.plate_id, 'sample_id']
                     same_well_tgt_samples = tgt_df.loc[tgt_df.well_id == src_row.well_id, 'sample_id']
                     hc_tgt_samples = pd.concat([same_plate_tgt_samples, same_well_tgt_samples])
@@ -195,10 +174,10 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
         sum_samples_df[f'{t}_reads_total'] = sum_samples_df[f'{t}_reads_total'].fillna(0).astype(int)
         # pass criteria:
         # - read count over filter value
-        # - haplotype is not high confidence target of contamination
+        # - haplotype is not high confidence affected by contamination
         t_pass_hap_gbs = t_hap_df[
             (t_hap_df.reads >= filters[i]) &
-            (t_hap_df.contamination_status != 'target') &
+            (t_hap_df.contamination_status != 'affected') &
             (t_hap_df.contamination_confidence != 'high')
             ].groupby('sample_id')
         sum_samples_df[f'{t}_reads_pass'] = t_pass_hap_gbs['reads'].sum()
@@ -213,7 +192,7 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
         # contaminated sequences with read count over filter value
         t_contam_hap_gbs = t_hap_df[
             (t_hap_df.reads >= filters[i]) &
-            (t_hap_df.contamination_status == 'target') &
+            (t_hap_df.contamination_status == 'affected') &
             (t_hap_df.contamination_confidence == 'high')
             ].groupby('sample_id')
         sum_samples_df[f'{t}_hapids_contam'] = t_contam_hap_gbs.agg({'hap_seqid': ','.join})
@@ -269,9 +248,7 @@ def plasm(args):
     setup_logging(verbose=args.verbose)
 
     os.makedirs(args.outdir, exist_ok=True)
-    # os.makedirs(args.workdir, exist_ok=True)
 
-    filters = [int(i) for i in args.filters.split(',')]
     # TODO verify ref
 
     logging.info('ANOSPP plasm data import started')
@@ -280,22 +257,27 @@ def plasm(args):
 
     plasm_hap_df = hap_df[hap_df['target'].isin(PLASM_TARGETS)].copy()
 
+    blastdb = f'{args.path_to_refversion}/{args.reference_version}/{args.blast_db_prefix}'
+
     blast_df = run_blast(
-        plasm_hap_df, args.outdir, 
-        args.path_to_refversion, args.reference_version
+        plasm_hap_df, 
+        args.outdir, 
+        blastdb,
+        args.blast_min_pident
         )
 
     contam_df = estimate_contamination(
         plasm_hap_df, samples_df,
-        min_samples=MIN_AFFECTED_SAMPLES, 
-        min_source_reads=MIN_READS_SOURCE_SAMPLE, 
-        max_target_reads=MAX_READS_AFFECTED_SAMPLE)
+        min_samples=args.contam_min_samples_affected, 
+        min_source_reads=args.contam_min_reads_source, 
+        max_affected_reads=args.contam_max_reads_affected
+        )
 
     sum_hap_df = summarise_haplotypes(hap_df, blast_df, contam_df)
 
     sum_hap_df.to_csv(f'{args.outdir}/plasm_hap_summary.tsv', sep='\t', index=False)
 
-    sum_samples_df = summarise_samples(sum_hap_df, samples_df, filters)
+    sum_samples_df = summarise_samples(sum_hap_df, samples_df, filters=[args.filter_p1, args.filter_p2])
 
     sum_samples_df.to_csv(f'{args.outdir}/plasm_sample_summary.tsv', sep='\t')
 
@@ -309,20 +291,36 @@ def main():
     parser = argparse.ArgumentParser("Plasmodium ID assignment for ANOSPP data")
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
-    parser.add_argument('-p', '--path_to_refversion', help='path to reference index version.\
-                        Default: ref_databases', default='ref_databases')
-    parser.add_argument('-r', '--reference_version', help='Reference index version - currently a directory name. \
-                        Default: plasmv1', default='plasmv1')
     parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='plasm')
-    # parser.add_argument('-w', '--workdir', help='Working directory. Default: work', default='work')
-    # parser.add_argument('-f', '--hard_filters', help='Remove all sequences supported by less tahn X reads \
-    #                     for P1 and P2. Default: 10,10', default='10,10')
-    parser.add_argument('-f', '--filters', help='Mark as non-confident any sequences of the predominant haplotype that are \
-                        supported by fewer than X reads for P1 and P2. Default: 10,10', default='10,10')
+    parser.add_argument('-p', '--path_to_refversion', 
+                        help='Path to reference index version. Default: ref_databases', 
+                        default='ref_databases')
+    parser.add_argument('-r', '--reference_version', 
+                        help='Reference index version - currently a directory name. Default: plasmv1',
+                        default='plasmv1')
+    parser.add_argument('--blast_db_prefix', 
+                        help='Blast database prefix in reference index', 
+                        default='plasmomito_P1P2_DB_v1.0')
+    parser.add_argument('--blast_min_pident', 
+                        help='Minimum blast sequence identity for haplotype species assignment. Default: 97',  
+                        default=97, type=int)
+    parser.add_argument('--contam_min_reads_source', 
+                        help='Minimum number of reads in a source sample for same plate/well contamination. Default: 10000',  
+                        default=10000, type=int)
+    parser.add_argument('--contam_max_reads_affected', 
+                        help='Maximum number of reads in a sample affected by same plate/well contamination. Default: 10000',  
+                        default=100, type=int)
+    parser.add_argument('--contam_min_samples_affected', 
+                        help='Minimum number of samples affected by plate/well contamination to be considered. Default: 4',  
+                        default=4, type=int)
+    parser.add_argument('-f', '--filter_p1',
+                        help='Minimum read support for P1 haplotypes to be included in sample summary. Default: 10',
+                        default=10, type=int)
+    parser.add_argument('-g', '--filter_p2', 
+                        help='Minimum read support for P2 haplotypes to be included in sample summary. Default: 10', 
+                        default=10, type=int)
     # parser.add_argument('-i', '--interactive_plotting', 
     #                         help='do interactive plotting', action='store_true', default=False)
-    # parser.add_argument('--filter_falciparum', help='Check for the highest occuring haplotypes of Plasmodium falciparum and filter', 
-    #                     action='store_true', default=False)
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
