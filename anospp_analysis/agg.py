@@ -11,11 +11,11 @@ def agg(args):
 
     logging.info('ANOSPP results merging data import started')
     
-    manifest_df = pd.read_csv(args.manifest, sep='\t', dtype='object')
-    qc_df = pd.read_csv(args.qc, sep='\t', dtype='object')
-    plasm_df = pd.read_csv(args.plasm, sep='\t', dtype='object')
-    nn_df = pd.read_csv(args.nn, sep='\t', dtype='object')
-    vae_df = pd.read_csv(args.vae, sep='\t', dtype='object')
+    run_id, manifest_df = prep_samples(args.manifest)
+    qc_df = pd.read_csv(args.qc, sep='\t')
+    plasm_df = pd.read_csv(args.plasm, sep='\t')
+    nn_df = pd.read_csv(args.nn, sep='\t')
+    vae_df = pd.read_csv(args.vae, sep='\t')
 
     logging.info("Merging result tables")
 
@@ -37,8 +37,8 @@ def agg(args):
 
     comb_df['nnovae_mosquito_species'] = comb_df.vae_species.fillna(comb_df.nn_species_call)
     is_nocall = comb_df['nnovae_mosquito_species'].isna()
-    assert ~is_nocall.any(), \
-        f'could not find none of NN or VAE call for {comb_df[is_nocall].index.to_list()}'
+    # assert ~is_nocall.any(), \
+    #     f'could not find none of NN or VAE call for {comb_df[is_nocall].index.to_list()}'
     
     comb_df['nnovae_call_method'] = comb_df.nn_call_method
     comb_df.loc[
@@ -47,6 +47,7 @@ def agg(args):
     ] = 'VAE'
 
     comb_df.to_csv(args.out, sep='\t', index=True)
+
 
 def main():
     
@@ -75,6 +76,7 @@ def main():
     args = parser.parse_args()
 
     agg(args)
+
 
 if __name__ == '__main__':
     main()

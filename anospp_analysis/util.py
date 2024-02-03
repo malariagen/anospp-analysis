@@ -342,7 +342,10 @@ def combine_stats(stats_df, hap_df, samples_df):
     elif set(hap_df.sample_id) - set(samples_df.sample_id) != set():
         logging.error('sample_id mismatch between haps and samples, QC results will be compromised')
 
-    comb_stats_df = pd.merge(stats_df, samples_df, on='sample_id', how='inner')
+    comb_stats_df = pd.merge(stats_df, samples_df, on='sample_id', how='outer')
+    for col in comb_stats_df.columns:
+        if col.endswith('_reads'):
+            comb_stats_df[col] = comb_stats_df[col].fillna(0).astype(int)
     comb_stats_df.set_index('sample_id', inplace=True)
     
     comb_stats_df['target_reads'] = hap_df[hap_df.target != 'unknown'] \

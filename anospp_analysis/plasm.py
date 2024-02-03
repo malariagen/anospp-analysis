@@ -16,6 +16,24 @@ from anospp_analysis.iplot import plot_plate_view
 
 BLAST_COLS = 'qseqid sseqid slen qstart qend length mismatch gapopen gaps sseq pident evalue bitscore qcovs'
 
+SUM_HAP_COLS = [
+        'sample_id',
+        'target',
+        'reads',
+        'total_reads',
+        'reads_fraction',
+        'nalleles',
+        'seqid',
+        'sample_name',
+        'contamination_status',
+        'contamination_confidence',
+        'sseqid',
+        'pident',
+        'qcovs',
+        'species_assignment',
+        'hap_seqid'
+    ]
+
 def run_blast(plasm_hap_df, outdir, blastdb, min_pident):
 
     logging.info('running blast')
@@ -134,23 +152,7 @@ def summarise_haplotypes(hap_df, blast_df, contam_df):
     sum_hap_df = pd.merge(hap_df, contam_df, how='left') # multiple columns to be merged
     sum_hap_df = pd.merge(sum_hap_df, blast_df, left_on='seqid', right_on='qseqid')
 
-    sum_hap_df = sum_hap_df[[
-        'sample_id',
-        'target',
-        'reads',
-        'total_reads',
-        'reads_fraction',
-        'nalleles',
-        'seqid',
-        'sample_name',
-        'contamination_status',
-        'contamination_confidence',
-        'sseqid',
-        'pident',
-        'qcovs',
-        'species_assignment',
-        'hap_seqid'
-    ]]
+    sum_hap_df = sum_hap_df[SUM_HAP_COLS]
 
     return sum_hap_df
 
@@ -254,9 +256,10 @@ def plasm(args):
     run_id, samples_df = prep_samples(args.manifest)
 
     plasm_hap_df = hap_df[hap_df['target'].isin(PLASM_TARGETS)].copy()
+    
+    ref_dir = f'{args.path_to_refversion}/{args.reference_version}'
 
     if plasm_hap_df.shape[0] > 0:
-        ref_dir = f'{args.path_to_refversion}/{args.reference_version}'
         blastdb = f'{args.path_to_refversion}/{args.reference_version}/{args.blast_db_prefix}'
 
         blast_df = run_blast(
@@ -275,29 +278,15 @@ def plasm(args):
 
         sum_hap_df = summarise_haplotypes(hap_df, blast_df, contam_df)
 
-    # no plasmodium sequences in run
+    # no plasmodium sequences in run - empty hap df
     else: 
-        sum_hap_df = pd.DataFrame(columns=[
-            'sample_id',
-            'target',
-            'reads',
-            'total_reads',
-            'reads_fraction',
-            'nalleles',
-            'seqid',
-            'sample_name',
-            'contamination_status',
-            'contamination_confidence',
-            'sseqid',
-            'pident',
-            'qcovs',
-            'species_assignment',
-            'hap_seqid'
-        ])
-        
+        sum_hap_df = pd.DataFrame(columns=SUM_HAP_COLS)
+
     sum_hap_df.to_csv(f'{args.outdir}/plasm_hap_summary.tsv', sep='\t', index=False)
 
     sum_samples_df = summarise_samples(sum_hap_df, samples_df, filters=[args.filter_p1, args.filter_p2])
+
+    sum_samples_df['plasm_ref'] = args.reference_version
 
     sum_samples_df.drop(columns=[
         'sample_name',
@@ -309,7 +298,9 @@ def plasm(args):
 
     if args.interactive_plotting:
         for t in PLASM_TARGETS:
+
             logging.info(f'plotting interactive lims plate view for {t}')
+            
             out_fn = f'{args.outdir}/spp_{t}_lims_plate.html'
             title = f'Plasmodium species composition run {run_id}, target {t}'
             plot_plate_view(sum_samples_df, out_fn, t, ref_dir, title)
@@ -318,8 +309,8 @@ def plasm(args):
 
     return
 
-def main():
 
+def main():
 
     parser = argparse.ArgumentParser("Plasmodium ID assignment for ANOSPP data")
     parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)

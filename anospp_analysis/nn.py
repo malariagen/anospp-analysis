@@ -334,15 +334,15 @@ def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
     comb_stats_df['multiallelic_mosq_targets'] = (
         non_error_hap_df.groupby('sample_id')['target'].value_counts() > 2
         ).groupby(level='sample_id').sum()
-    comb_stats_df['multiallelic_mosq_targets'] = comb_stats_df['multiallelic_mosq_targets'].fillna(0)
 
     #recompute read counts after filtering and error removal
     comb_stats_df['mosq_reads'] = non_error_hap_df.groupby('sample_id')['reads'].sum()
-    comb_stats_df['mosq_reads'] = comb_stats_df['mosq_reads'].fillna(0)
 
     #recompute targets recovered after filtering and error removal
     comb_stats_df['mosq_targets_recovered'] = non_error_hap_df.groupby('sample_id')['target'].nunique()
-    comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].fillna(0)
+
+    for col in ['multiallelic_mosq_targets', 'mosq_reads', 'mosq_targets_recovered']:
+        comb_stats_df[col] = comb_stats_df[col].fillna(0).astype(int)
 
     comb_stats_df.reset_index(inplace=True)
 
@@ -515,6 +515,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
 
     return fig, axs
 
+
 def nn(args):
 
     setup_logging(verbose=args.verbose)
@@ -587,6 +588,7 @@ def nn(args):
         args.high_contamination_multi_allelic_threshold
     )
 
+    comb_stats_df['nn_ref'] = args.reference_version
     logging.info(f'writing assignment results to {args.outdir}')
     comb_stats_df[[
         'sample_id',
@@ -600,7 +602,8 @@ def nn(args):
         'res_fine',
         'contamination_risk',
         'nn_species_call',
-        'nn_call_method'
+        'nn_call_method',
+        'nn_ref'
     ]].to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
     
     summary_text = generate_summary(comb_stats_df, version_name)
@@ -677,6 +680,7 @@ def main():
     args.outdir=args.outdir.rstrip('/')
 
     nn(args)
+
 
 if __name__ == '__main__':
     main()

@@ -104,6 +104,8 @@ def plot_plate_view(df, out_fn, target, reference_path, title=None):
     None.
     '''
 
+    assert os.path.isdir(reference_path), f'{reference_path} reference directory does not exist'
+
     # set the output filename
     output_file(out_fn)
 

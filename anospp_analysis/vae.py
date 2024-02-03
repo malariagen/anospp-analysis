@@ -681,10 +681,12 @@ def vae(args):
         latent_positions_df = predict_latent_pos(kmer_table, vae_samples, K, vae_weights_file)
         hull_dict = generate_convex_hulls(convex_hulls_df)
         ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
-        ch_assignment_df.to_csv(f'{args.outdir}/vae_assignment.tsv', sep='\t')
         if not args.no_plotting:
             fig, _ = plot_vae_assignments(ch_assignment_df, ref_coordinates, colordict, run_id)
             fig.savefig(f'{args.outdir}/vae_assignment.png')
+
+    ch_assignment_df['vae_ref'] = args.reference_version
+    ch_assignment_df.to_csv(f'{args.outdir}/vae_assignment.tsv', sep='\t')
 
     summary_text = generate_summary(ch_assignment_df, nn_stats_df, version_name)
     logging.info(f'writing summary file to {args.outdir}')
@@ -720,6 +722,7 @@ def main():
     args.outdir=args.outdir.rstrip('/')
 
     vae(args)
+
 
 if __name__ == '__main__':
     main()

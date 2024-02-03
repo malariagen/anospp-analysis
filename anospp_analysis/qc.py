@@ -13,14 +13,6 @@ def write_qc_stats(comb_stats_df, out_fn):
 
     comb_stats_df[[
         'sample_id',
-        'sample_name',
-        'run_id',
-        'lane_index',
-        'tag_index',
-        'lims_plate_id',
-        'lims_well_id',
-        'plate_id',
-        'well_id',
         'total_reads',
         'readthrough_pass_reads',
         'DADA2_input_reads',
@@ -509,6 +501,7 @@ def qc(args):
 
     logging.info('ANOSPP QC complete')
 
+
 def main():
     
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
@@ -525,6 +518,7 @@ def main():
     args.outdir=args.outdir.rstrip('/')
 
     qc(args)
+
 
 if __name__ == '__main__':
     main()
