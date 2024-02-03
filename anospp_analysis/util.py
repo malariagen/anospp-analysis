@@ -247,11 +247,9 @@ def prep_samples(samples_fn):
     assert samples_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'Found well_id outside A1...H12'
     
     # sample_name - short sample id for plotting
-    if 'sanger_sample_id' in samples_df.columns:
-        # works if sanger_sample_id does not contain dashes
-        samples_df['sample_name'] = samples_df['sample_id'].str.rsplit('-', n=1).str.get(0)
-    else:
-        samples_df['sample_name'] = samples_df['sample_id']
+    # works if sanger_sample_id does not contain dashes
+    # and if sample ID is a concatenation of sample_name and sanger_sample_id
+    samples_df['sample_name'] = samples_df['sample_id'].str.rsplit('-', n=1).str.get(0)
 
     # first run record assumed to be the run ID for plot titles
     run_id = samples_df['run_id'].iloc[0]

@@ -112,7 +112,7 @@ def estimate_contamination(hap_df, sample_df, min_samples, min_source_reads, max
                 ext_hap_df.loc[(ext_hap_df.seqid == seqid), 'contamination_status'] = 'unclear'
                 ext_hap_df.loc[src_haps, 'contamination_status'] = 'source'
                 ext_hap_df.loc[tgt_haps, 'contamination_status'] = 'affected'
-                # confidence - plate/well match
+                # confidence - low without plate/well match
                 ext_hap_df.loc[tgt_haps, 'contamination_confidence'] = 'low'
                 for _, src_row in src_df.iterrows():
                     # affected samples sharing plate or well with source
@@ -120,9 +120,9 @@ def estimate_contamination(hap_df, sample_df, min_samples, min_source_reads, max
                     same_well_tgt_samples = tgt_df.loc[tgt_df.well_id == src_row.well_id, 'sample_id']
                     hc_tgt_samples = pd.concat([same_plate_tgt_samples, same_well_tgt_samples])
                     if len(hc_tgt_samples) > 0:
-                        # sample  & hap define positions in original df
+                        # sample & hap define positions in original df
                         hc_tgt_haps = (ext_hap_df.sample_id.isin(hc_tgt_samples) & (ext_hap_df.seqid == seqid))
-                        # update confidence 
+                        # update confidence for plate/well match
                         ext_hap_df.loc[hc_tgt_haps, 'contamination_confidence'] = 'high'
 
     return ext_hap_df
@@ -170,8 +170,8 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
     for i, t in enumerate(PLASM_TARGETS):
         t_hap_df = sum_hap_df[sum_hap_df.target == t]
         t_sum_hap_gbs = t_hap_df.groupby('sample_id')
-        sum_samples_df[f'{t}_reads_total'] = t_sum_hap_gbs['reads'].sum()
-        sum_samples_df[f'{t}_reads_total'] = sum_samples_df[f'{t}_reads_total'].fillna(0).astype(int)
+        # sum_samples_df[f'{t}_reads_total'] = t_sum_hap_gbs['reads'].sum()
+        # sum_samples_df[f'{t}_reads_total'] = sum_samples_df[f'{t}_reads_total'].fillna(0).astype(int)
         # pass criteria:
         # - read count over filter value
         # - haplotype is not high confidence affected by contamination
@@ -221,7 +221,7 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
         elif len(p2_spp) > 0:
             status = 'P2_only'
         elif is_contam:
-            status = 'contamination'
+            status = 'contamination_only'
         else:
             status = 'no_infection'
 
@@ -249,38 +249,63 @@ def plasm(args):
 
     os.makedirs(args.outdir, exist_ok=True)
 
-    # TODO verify ref
-
     logging.info('ANOSPP plasm data import started')
     hap_df = prep_hap(args.haplotypes)
     run_id, samples_df = prep_samples(args.manifest)
 
     plasm_hap_df = hap_df[hap_df['target'].isin(PLASM_TARGETS)].copy()
 
-    ref_dir = f'{args.path_to_refversion}/{args.reference_version}'
-    blastdb = f'{args.path_to_refversion}/{args.reference_version}/{args.blast_db_prefix}'
+    if plasm_hap_df.shape[0] > 0:
+        ref_dir = f'{args.path_to_refversion}/{args.reference_version}'
+        blastdb = f'{args.path_to_refversion}/{args.reference_version}/{args.blast_db_prefix}'
 
-    blast_df = run_blast(
-        plasm_hap_df, 
-        args.outdir, 
-        blastdb,
-        args.blast_min_pident
-        )
+        blast_df = run_blast(
+            plasm_hap_df, 
+            args.outdir, 
+            blastdb,
+            args.blast_min_pident
+            )
 
-    contam_df = estimate_contamination(
-        plasm_hap_df, samples_df,
-        min_samples=args.contam_min_samples_affected, 
-        min_source_reads=args.contam_min_reads_source, 
-        max_affected_reads=args.contam_max_reads_affected
-        )
+        contam_df = estimate_contamination(
+            plasm_hap_df, samples_df,
+            min_samples=args.contam_min_samples_affected, 
+            min_source_reads=args.contam_min_reads_source, 
+            max_affected_reads=args.contam_max_reads_affected
+            )
 
-    sum_hap_df = summarise_haplotypes(hap_df, blast_df, contam_df)
+        sum_hap_df = summarise_haplotypes(hap_df, blast_df, contam_df)
 
+    # no plasmodium sequences in run
+    else: 
+        sum_hap_df = pd.DataFrame(columns=[
+            'sample_id',
+            'target',
+            'reads',
+            'total_reads',
+            'reads_fraction',
+            'nalleles',
+            'seqid',
+            'sample_name',
+            'contamination_status',
+            'contamination_confidence',
+            'sseqid',
+            'pident',
+            'qcovs',
+            'species_assignment',
+            'hap_seqid'
+        ])
+        
     sum_hap_df.to_csv(f'{args.outdir}/plasm_hap_summary.tsv', sep='\t', index=False)
 
     sum_samples_df = summarise_samples(sum_hap_df, samples_df, filters=[args.filter_p1, args.filter_p2])
 
-    sum_samples_df.to_csv(f'{args.outdir}/plasm_sample_summary.tsv', sep='\t')
+    sum_samples_df.drop(columns=[
+        'sample_name',
+        'lims_plate_id',
+        'lims_well_id',
+        'plate_id',
+        'well_id'
+    ]).to_csv(f'{args.outdir}/plasm_assignment.tsv', sep='\t')
 
     if args.interactive_plotting:
         for t in PLASM_TARGETS:

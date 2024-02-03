@@ -424,7 +424,7 @@ def check_is_in_hull(hull_pos, positions):
     return in_hull
 
 def get_unassigned_samples(latent_positions_df):
-    unassigned = latent_positions_df.loc[latent_positions_df.VAE_species.isnull()].index
+    unassigned = latent_positions_df.loc[latent_positions_df.vae_species.isnull()].index
     n_unassigned = len(unassigned)
     return unassigned, n_unassigned
 
@@ -458,7 +458,7 @@ def assign_gam_col_band(latent_positions_df, summary_dist_df):
         gamcol_dict = dict(gamcol_band.apply(
             lambda row: 'Uncertain_' + row.species1.split('_')[1] + '_' + row.species2.split('_')[1],
             axis=1))
-        latent_positions_df.loc[gamcol_band.index, 'VAE_species'] = latent_positions_df.loc[\
+        latent_positions_df.loc[gamcol_band.index, 'vae_species'] = latent_positions_df.loc[\
             gamcol_band.index
             ].index.map(gamcol_dict)
     return latent_positions_df, gamcol_band.shape[0]
@@ -474,7 +474,7 @@ def assign_to_closest_hull(latent_positions_df, summary_dist_df, unassigned):
         ].copy()
     if fuzzy_hulls.shape[0] > 0:
         fuzzy_hulls_dict = dict(fuzzy_hulls.species1)
-        latent_positions_df.loc[unassigned, 'VAE_species'] = latent_positions_df.loc[
+        latent_positions_df.loc[unassigned, 'vae_species'] = latent_positions_df.loc[
             unassigned
             ].index.map(fuzzy_hulls_dict)
     return latent_positions_df, fuzzy_hulls.shape[0]
@@ -491,7 +491,7 @@ def assign_to_multiple_hulls(latent_positions_df, dist_df, unassigned):
                 ]
             ),
         axis=1))
-    latent_positions_df.loc[unassigned, 'VAE_species'] = latent_positions_df.loc[
+    latent_positions_df.loc[unassigned, 'vae_species'] = latent_positions_df.loc[
         unassigned
         ].index.map(between_hulls_dict)
     return latent_positions_df, between_hulls.shape[0]
@@ -506,7 +506,7 @@ def perform_convex_hull_assignments(hull_dict, latent_positions_df):
     #first check which samples fall inside convex hulls
     for label in hull_dict.keys():
         is_in_hull = check_is_in_hull(hull_dict[label][0], positions)
-        latent_positions_df.loc[is_in_hull, 'VAE_species'] = label
+        latent_positions_df.loc[is_in_hull, 'vae_species'] = label
     
     #Record unassigned samples 
     unassigned, n_unassigned = get_unassigned_samples(latent_positions_df)
@@ -548,12 +548,12 @@ def perform_convex_hull_assignments(hull_dict, latent_positions_df):
 
     return latent_positions_df
 
-def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict, run_id):
+def plot_vae_assignments(ch_assignments, ref_coordinates, colordict, run_id):
 
     logging.info('generating VAE plots')
     #get assignment categories
     single, double, multi = [], [], []
-    species_dict = dict(ch_assignments.groupby('VAE_species').size())
+    species_dict = dict(ch_assignments.groupby('vae_species').size())
     for key in species_dict.keys():
         #for single species assignment
         if key.startswith('Anopheles_'):
@@ -570,7 +570,7 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict, run_id):
     fig.suptitle(f'An. gambiae complex VAE assignment for run {run_id}')
 
     #Plot reference dataset
-    ref_coordinates['color'] = ref_coordinates.VAE_species.map(colordict)
+    ref_coordinates['color'] = ref_coordinates.vae_species.map(colordict)
     ax.scatter(
         ref_coordinates.mean1, 
         ref_coordinates.mean3, 
@@ -582,7 +582,7 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict, run_id):
     #Plot samples assigned to single species
     if len(single) > 0:
         for species in single:
-            sub = ch_assignments.query('VAE_species == @species')
+            sub = ch_assignments.query('vae_species == @species')
             if species == 'Anopheles_bwambae-fontenillei':
                 label = f'Anopheles_bwambae-\nfontenillei: {species_dict[species]}'
             else:
@@ -600,7 +600,7 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict, run_id):
     #Plot samples assigned to two species
     if len(double)>0:    
         for species in double:
-            sub = ch_assignments.query('VAE_species == @species')
+            sub = ch_assignments.query('vae_species == @species')
             _, sp1, sp2 = species.split('_')
             #multiple lines on the legend
             if sp1 == 'bwambae-fontenillei':
@@ -620,7 +620,7 @@ def plot_VAE_assignments(ch_assignments, ref_coordinates, colordict, run_id):
 
     #Plot remaining samples
     if len(multi)>0:    
-        sub = ch_assignments.query('VAE_species in @multi')
+        sub = ch_assignments.query('vae_species in @multi')
         ax.scatter(
             sub.mean1, 
             sub.mean3,
@@ -644,7 +644,7 @@ def generate_summary(ch_assignments, nn_stats_df, version_name):
         f'{ch_assignments.index.nunique()} samples met the VAE selection criteria',
         f'Samples are assigned to the following labels:'
     ]
-    assignment_dict = dict(ch_assignments.groupby('VAE_species').size())
+    assignment_dict = dict(ch_assignments.groupby('vae_species').size())
     for key in assignment_dict.keys():
         summary.append(f'{key}:\t {assignment_dict[key]}')
 
@@ -673,7 +673,7 @@ def vae(args):
     if len(vae_samples) == 0:
         logging.info('No samples to be run through VAE - skipping to finalising assignments')
         ch_assignment_df = pd.DataFrame(columns = [
-            'mean1', 'mean2', 'mean3', 'sd1', 'sd2', 'sd3', 'VAE_species'
+            'mean1', 'mean2', 'mean3', 'sd1', 'sd2', 'sd3', 'vae_species'
             ])
 
     else:
@@ -683,7 +683,7 @@ def vae(args):
         ch_assignment_df = perform_convex_hull_assignments(hull_dict, latent_positions_df)
         ch_assignment_df.to_csv(f'{args.outdir}/vae_assignment.tsv', sep='\t')
         if not args.no_plotting:
-            fig, _ = plot_VAE_assignments(ch_assignment_df, ref_coordinates, colordict, run_id)
+            fig, _ = plot_vae_assignments(ch_assignment_df, ref_coordinates, colordict, run_id)
             fig.savefig(f'{args.outdir}/vae_assignment.png')
 
     summary_text = generate_summary(ch_assignment_df, nn_stats_df, version_name)

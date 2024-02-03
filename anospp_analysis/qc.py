@@ -13,6 +13,14 @@ def write_qc_stats(comb_stats_df, out_fn):
 
     comb_stats_df[[
         'sample_id',
+        'sample_name',
+        'run_id',
+        'lane_index',
+        'tag_index',
+        'lims_plate_id',
+        'lims_well_id',
+        'plate_id',
+        'well_id',
         'total_reads',
         'readthrough_pass_reads',
         'DADA2_input_reads',

@@ -5,84 +5,75 @@ import argparse
 
 from anospp_analysis.util import *
 
-def read_in_results(nn_path, vae_path):
-
-    logging.info("Reading in result files")
-    nn = pd.read_csv(nn_path, sep='\t')
-    vae = pd.read_csv(vae_path, sep='\t')
-
-    return nn, vae
-
-def merge_results(nn, vae):
-
-    logging.info("Merging result tables")
-    results_df = pd.merge(nn, vae, how='left', on='sample_id')
-
-    return results_df
- 
-def generate_consensus_mosquito(results_df):
-    logging.info('finalising mosquito species assignments')
-
-    #Get final species call
-    #Samples assigned by VAE
-    results_df['species_call'] = results_df.VAE_species
-    results_df.loc[~results_df.species_call.isnull(), 'call_method'] = 'VAE'
-    
-    #Samples assigned by NN
-    for level in ['fine', 'int', 'coarse']:
-        leveldict = dict(zip(results_df.sample_id, results_df[f'res_{level}']))
-        results_df.loc[(results_df.species_call.isnull()) & \
-            (~results_df[f'res_{level}'].isnull()), 'call_method'] = f'NN_{level}'
-        results_df.loc[results_df.call_method == f'NN_{level}', \
-            'species_call'] = results_df.loc[results_df.call_method == \
-            f'NN_{level}', 'sample_id'].map(leveldict)
-        
-    #Rainbow samples
-    results_df.loc[(results_df.species_call.isnull()) & \
-        (results_df.NN_assignment=='yes'), 'call_method'] = 'NN'
-    results_df.loc[results_df.call_method=='NN', 'species_call'] = 'RAINBOW_SAMPLE'
-
-    #Samples with too few targets
-    results_df.loc[results_df.NN_assignment=='no', 'call_method'] = 'TOO_FEW_TARGETS'
-    results_df.loc[results_df.NN_assignment=='no', 'species_call'] = 'TOO_FEW_TARGETS'
-
-    assert not results_df.species_call.isnull().any(), 'some samples not assigned'
-    assert not results_df.call_method.isnull().any(), 'some samples not assigned'
-
-    return results_df
-
-
 def agg(args):
 
     setup_logging(verbose=args.verbose)
 
-    os.makedirs(args.outdir, exist_ok =True)
+    logging.info('ANOSPP results merging data import started')
+    
+    manifest_df = pd.read_csv(args.manifest, sep='\t', dtype='object')
+    qc_df = pd.read_csv(args.qc, sep='\t', dtype='object')
+    plasm_df = pd.read_csv(args.plasm, sep='\t', dtype='object')
+    nn_df = pd.read_csv(args.nn, sep='\t', dtype='object')
+    vae_df = pd.read_csv(args.vae, sep='\t', dtype='object')
 
-    logging.info('ANOSPP results merging started')
+    logging.info("Merging result tables")
 
-    nn, vae = read_in_results(args.nn, args.vae)
-    results_df = merge_results(nn, vae)
-    expanded_results_df = generate_consensus_mosquito(results_df)
-    expanded_results_df.to_csv(f'{args.outdir}/anospp_results.tsv', sep='\t', index=False)
+    assert set(manifest_df.sample_id) == set(qc_df.sample_id), \
+        'lanelets manifest and QC samples do not match'
+    comb_df = pd.merge(manifest_df, qc_df, how='inner')
 
+    assert set(comb_df.sample_id) == set(plasm_df.sample_id), \
+        'plasm samples do not match QC & lanelets'
+    comb_df = pd.merge(comb_df, plasm_df, how='inner')
+
+    assert set(comb_df.sample_id) == set(nn_df.sample_id), \
+        'NN samples do not match plasm, QC & lanelets'
+    comb_df = pd.merge(comb_df, nn_df, how='inner')
+
+    assert vae_df.index.isin(comb_df.index).all(), \
+        'VAE samples do not match NN, plasm, QC & lanelets'
+    comb_df = pd.merge(comb_df, vae_df, how='left')
+
+    comb_df['nnovae_mosquito_species'] = comb_df.vae_species.fillna(comb_df.nn_species_call)
+    is_nocall = comb_df['nnovae_mosquito_species'].isna()
+    assert ~is_nocall.any(), \
+        f'could not find none of NN or VAE call for {comb_df[is_nocall].index.to_list()}'
+    
+    comb_df['nnovae_call_method'] = comb_df.nn_call_method
+    comb_df.loc[
+        comb_df.sample_id.isin(vae_df.sample_id),
+        'nnovae_call_method'
+    ] = 'VAE'
+
+    comb_df.to_csv(args.out, sep='\t', index=True)
 
 def main():
     
-    parser = argparse.ArgumentParser("Merging ANOSPP results")
-    parser.add_argument('--qc')
-    parser.add_argument('--prep')
-    parser.add_argument('--nn', help='path to nn results. Default: nn/nn_assignment.tsv', 
+    parser = argparse.ArgumentParser('Merging ANOSPP run analysis results into a single file')
+    parser.add_argument('-m', '--manifest',
+                        help='path to GbS lanelets manifest tsv. Default: ../gbs_lanelets.tsv',
+                        default='../gbs_lanelets.tsv')
+    parser.add_argument('-q', '--qc',
+                        help='path to qc summary tsv. Default: qc/sample_qc_stats.tsv',
+                        default='qc/sample_qc_stats.tsv')
+    parser.add_argument('-n', '--nn', 
+                        help='path to NN assignment tsv. Default: nn/nn_assignment.tsv', 
                         default='nn/nn_assignment.tsv')
-    parser.add_argument('--vae', help='path to vae results. Default: vae/vae_assignment.tsv',
+    parser.add_argument('-e', '--vae', 
+                        help='path to VAE assignment tsv. Default: vae/vae_assignment.tsv',
                         default='vae/vae_assignment.tsv')
-    parser.add_argument('--plasm')
-    parser.add_argument('-o', '--outdir', help='Output directory. Default: results', 
-                        default='results')
+    parser.add_argument('-p', '--plasm', 
+                        help='path to plasm assignment tsv. Default: plasm/plasm_assignment.tsv',
+                        default='plasm/plasm_assignment.tsv')
+    parser.add_argument('-o', '--out', 
+                        help='Output aggregated sample metadata tsv. Default: anospp_results.tsv', 
+                        default='anospp_results.tsv')
     parser.add_argument('-v', '--verbose', 
                         help='Include INFO level log messages', action='store_true')
 
     args = parser.parse_args()
-    args.outdir=args.outdir.rstrip('/')
+
     agg(args)
 
 if __name__ == '__main__':

@@ -311,17 +311,17 @@ def perform_nn_assignment_samples(hap_df, ref_hap_df, nndict, allele_freqs, norm
                     results[level][tgt, i, :] += assignment_proportion
 
     #print(f'shape of results arrays is {results_coarse.shape}, {results_int.shape} and {results_fine.shape}')
-    results_df = dict()
+    results_dfs = dict()
     for level in ['coarse', 'int', 'fine']:
         #Average assignment results over amplified targets
         res = np.nansum(results[level], axis=0)/np.sum(np.nansum(results[level], axis=0), axis=1)[:,None]
         #Convert results to dataframes
-        results_df[level] = pd.DataFrame(
+        results_dfs[level] = pd.DataFrame(
             res, 
             index=test_samples, 
             columns=ref_hap_df[f'{level}_sgp'].cat.categories
         )  
-    return results_df, test_samples
+    return results_dfs, test_samples
 
 def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
     '''
@@ -387,7 +387,7 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets,
 
     return comb_stats_df
 
-def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_df, \
+def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_dfs, \
                         true_multi_targets, nn_asgn_threshold, \
                         rc_med_threshold, ma_med_threshold, ma_hi_threshold):
 
@@ -397,15 +397,15 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
     comb_stats_df = recompute_sample_coverage(comb_stats_df, non_error_hap_df)
 
     #Record whether NN assignment was performed
-    comb_stats_df.loc[comb_stats_df.sample_id.isin(test_samples), 'NN_assignment'] = 'yes'
-    comb_stats_df.loc[comb_stats_df.NN_assignment.isnull(), 'NN_assignment'] = 'no'
+    comb_stats_df.loc[comb_stats_df.sample_id.isin(test_samples), 'nn_assignment'] = 'yes'
+    comb_stats_df.loc[comb_stats_df.nn_assignment.isnull(), 'nn_assignment'] = 'no'
 
     #Generate assignment hard calls if the threshold is met
     for level in ['coarse', 'int', 'fine']:
-        asgn_dict = dict(results_df[level] \
-            .loc[(results_df[level] >= nn_asgn_threshold).any(axis=1)] \
+        asgn_dict = dict(results_dfs[level] \
+            .loc[(results_dfs[level] >= nn_asgn_threshold).any(axis=1)] \
             .apply(
-                lambda row: results_df[level].columns[row >= nn_asgn_threshold][0],
+                lambda row: results_dfs[level].columns[row >= nn_asgn_threshold][0],
                 axis=1))
         comb_stats_df[f'res_{level}'] = comb_stats_df.sample_id.map(asgn_dict)
 
@@ -418,6 +418,30 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
         ma_hi_threshold
     )
 
+    comb_stats_df['nn_species_call'] = None
+    comb_stats_df['nn_call_method'] = None
+    # NN hierarchical assignment by level
+    for level in ['fine', 'int', 'coarse']:
+        leveldict = dict(zip(comb_stats_df.sample_id, comb_stats_df[f'res_{level}']))
+        is_id_on_level = (comb_stats_df.nn_species_call.isnull() & ~comb_stats_df[f'res_{level}'].isnull())
+        comb_stats_df.loc[is_id_on_level, 'nn_call_method'] = f'NN_{level}'
+        comb_stats_df.loc[is_id_on_level, 'nn_species_call'] = comb_stats_df.loc[
+            comb_stats_df.nn_call_method == f'NN_{level}', 'sample_id'
+            ].map(leveldict)
+    
+    #Rainbow samples
+    is_rainbow = (comb_stats_df.nn_species_call.isnull() & comb_stats_df.nn_assignment == 'yes')
+    comb_stats_df.loc[is_rainbow, 'nn_call_method'] = 'NN'
+    comb_stats_df.loc[is_rainbow, 'nn_species_call'] = 'RAINBOW_SAMPLE'
+
+    #Samples with too few targets
+    is_not_id = (comb_stats_df.nn_assignment == 'no')
+    comb_stats_df.loc[is_not_id, 'nn_call_method'] = 'TOO_FEW_TARGETS'
+    comb_stats_df.loc[is_not_id, 'nn_species_call'] = 'TOO_FEW_TARGETS'
+
+    # assert not comb_stats_df.nn_species_call.isnull().any(), 'some samples not assigned'
+    # assert not comb_stats_df.nn_call_method.isnull().any(), 'some samples not assigned'
+
     return comb_stats_df
 
 def generate_summary(comb_stats_df, version_name):
@@ -428,20 +452,20 @@ def generate_summary(comb_stats_df, version_name):
         f'{(comb_stats_df.contamination_risk == "high").sum()} samples have high contamination risk',
         f'{(comb_stats_df.contamination_risk == "medium").sum()} samples have medium contamination risk',
         f'{(comb_stats_df.contamination_risk == "low").sum()} samples have low contamination risk',
-        f'{(comb_stats_df.NN_assignment=="no").sum()} samples with < 10 targets lack NN assignment',
+        f'{(comb_stats_df.nn_assignment=="no").sum()} samples with < 10 targets lack NN assignment',
         f'{(~comb_stats_df.res_coarse.isnull()).sum()} samples are assigned at coarse level',
         f'to {comb_stats_df.res_coarse.nunique()} different species groups',
         f'{(~comb_stats_df.res_int.isnull()).sum()} samples are assigned at intermediate level',
         f'to {comb_stats_df.res_int.nunique()} different species groups',
         f'{(~comb_stats_df.res_fine.isnull()).sum()} samples are assigned at fine level',
         f'to {comb_stats_df.res_fine.nunique()} different species groups',
-        f'{comb_stats_df.loc[(comb_stats_df.NN_assignment=="yes") & (comb_stats_df.res_int.isnull()), "sample_id"].nunique()} '
+        f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_int", "sample_id"].nunique()} '
          'samples with sufficient coverage could not be assigned at intermediate level',
-        f'{comb_stats_df.loc[(comb_stats_df.NN_assignment=="yes") & (comb_stats_df.res_int.isnull()) & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
+        f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_int") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
          'of those have medium or high contamination risk',
-        f'{comb_stats_df.loc[(comb_stats_df.NN_assignment=="yes") & (comb_stats_df.res_coarse.isnull()), "sample_id"].nunique()} '
+        f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_coarse", "sample_id"].nunique()} '
          'samples with sufficient coverage could not be assigned at coarse level',
-        f'{comb_stats_df.loc[(comb_stats_df.NN_assignment=="yes") & (comb_stats_df.res_coarse.isnull()) & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
+        f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_coarse") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
          'of those have medium or high contamination risk'
     ]
     return '\n'.join(summary)
@@ -534,9 +558,14 @@ def nn(args):
     nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
     nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
     nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
-    nn_df[['nn_id', 'nn_dist']].to_csv(f'{args.outdir}/nn_dictionary.tsv', sep='\t')
+    nn_df.index.name = 'seqid'
+    nn_df[['nn_id', 'nn_dist']].to_csv(
+        f'{args.outdir}/nn_dist_to_ref.tsv', 
+        sep='\t',
+        index=True
+        )
 
-    results_df, test_samples = perform_nn_assignment_samples(
+    results_dfs, test_samples = perform_nn_assignment_samples(
         non_error_hap_df, 
         ref_hap_df, 
         nndict, 
@@ -544,13 +573,13 @@ def nn(args):
         args.allelism_normalisation
     )
     for level in ['coarse', 'int', 'fine']:
-        results_df[level].to_csv(f'{args.outdir}/assignment_{level}.tsv', sep='\t')
+        results_dfs[level].to_csv(f'{args.outdir}/assignment_{level}.tsv', sep='\t')
 
     comb_stats_df = generate_hard_calls(
         comb_stats_df, 
         non_error_hap_df, 
         test_samples,
-        results_df, 
+        results_dfs, 
         true_multi_targets, 
         args.nn_assignment_threshold,
         args.medium_contamination_read_count_threshold,
@@ -565,11 +594,13 @@ def nn(args):
         'multiallelic_mosq_targets',
         'mosq_reads',
         'mosq_targets_recovered',
-        'NN_assignment',
+        'nn_assignment',
         'res_coarse',
         'res_int',
         'res_fine',
-        'contamination_risk'
+        'contamination_risk',
+        'nn_species_call',
+        'nn_call_method'
     ]].to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
     
     summary_text = generate_summary(comb_stats_df, version_name)
@@ -581,7 +612,7 @@ def nn(args):
         for level in ['coarse', 'int', 'fine']:
             fig, _ = plot_assignment_proportions(
                 comb_stats_df, 
-                results_df[level], 
+                results_dfs[level], 
                 level, 
                 colors[level], 
                 args.nn_assignment_threshold,
