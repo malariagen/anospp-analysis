@@ -478,7 +478,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
     comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
     comb_stats_df['well_id'] = well_ordering(comb_stats_df['well_id'])
-    comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
+    # comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
     #add samples with <10 targets
     nn_level_result_df = pd.concat([
         nn_level_result_df, pd.DataFrame(
@@ -538,77 +538,104 @@ def nn(args):
     ref_hap_df, allele_freqs, true_multi_targets, \
         colors, version_name = prep_reference_index(\
         args.reference_version, path_to_refversion=args.path_to_refversion)
+        
+    non_error_hap_fn = f'{args.outdir}/non_error_haplotypes.tsv'
+    nndict_fn = f'{args.outdir}/nn_dist_to_ref.tsv'
+    if args.resume and os.path.isfile(non_error_hap_fn) and os.path.isfile(nndict_fn):
+        logging.warning(f'reading non error haplotype data from {non_error_hap_fn}')
+        non_error_hap_df = pd.read_csv(non_error_hap_fn, sep='\t')
 
-    kmers = construct_unique_kmer_table(mosq_hap_df, args.kmer_length)
-    ref_kmers = construct_unique_kmer_table(ref_hap_df, args.kmer_length)
+        logging.warning(f'reading nndict from {nndict_fn}')
+        nndict = {}
+        with open(nndict_fn) as f:
+            next(f)
+            for line in f:
+                ll = line.strip().split('\t')
+                if len(ll) == 3:
+                    nndict[ll[0]] = ([int(i) for i in ll[1].split('|')], float(ll[2]))
+    else:
+        kmers = construct_unique_kmer_table(mosq_hap_df, args.kmer_length)
+        ref_kmers = construct_unique_kmer_table(ref_hap_df, args.kmer_length)
 
-    error_seqs = identify_error_seqs(mosq_hap_df, kmers, args.kmer_length, args.n_error_snps)
-    non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
-    non_error_hap_df = recompute_haplotype_coverage(non_error_hap_df)
-    non_error_hap_df[[
-        'sample_id',
-        'target',
-        'consensus',
-        'reads',
-        'seqid',
-        'total_reads',
-        'reads_fraction',
-        'nalleles'
-    ]].to_csv(f'{args.outdir}/non_error_haplotypes.tsv', index=False, sep='\t')
-    
-    nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
-    nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
-    nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
-    nn_df.index.name = 'seqid'
-    nn_df[['nn_id', 'nn_dist']].to_csv(
-        f'{args.outdir}/nn_dist_to_ref.tsv', 
-        sep='\t',
-        index=True
+        error_seqs = identify_error_seqs(mosq_hap_df, kmers, args.kmer_length, args.n_error_snps)
+        non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
+        non_error_hap_df = recompute_haplotype_coverage(non_error_hap_df)
+        non_error_hap_df[[
+            'sample_id',
+            'target',
+            'consensus',
+            'reads',
+            'seqid',
+            'total_reads',
+            'reads_fraction',
+            'nalleles'
+        ]].to_csv(non_error_hap_fn, index=False, sep='\t')
+
+        nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
+        nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
+        nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
+        nn_df.index.name = 'seqid'
+        nn_df[['nn_id', 'nn_dist']].to_csv(
+            nndict_fn, 
+            sep='\t',
+            index=True
+            )
+
+    nn_assignment_fn = f'{args.outdir}/nn_assignment.tsv'
+    if args.resume and os.path.isfile(nn_assignment_fn):
+        logging.warning(f'reading nn assignments from {nn_assignment_fn}')
+        nn_stats_df = pd.read_csv(nn_assignment_fn, sep='\t')
+        comb_stats_df = pd.merge(comb_stats_df, nn_stats_df, on='sample_id', how='left')
+        results_dfs = {}
+        for level in ['coarse', 'int', 'fine']:
+            level_assignment_fn = f'{args.outdir}/assignment_{level}.tsv'
+            logging.warning(f'reading {level} assignments from {level_assignment_fn}')
+            # TODO fix heterogeneity in use of sample_id as index
+            results_dfs[level] = pd.read_csv(level_assignment_fn, sep='\t', index_col=0)
+    else:
+        results_dfs, test_samples = perform_nn_assignment_samples(
+            non_error_hap_df, 
+            ref_hap_df, 
+            nndict, 
+            allele_freqs, 
+            args.allelism_normalisation
+        )
+        for level in ['coarse', 'int', 'fine']:
+            results_dfs[level].to_csv(f'{args.outdir}/assignment_{level}.tsv', sep='\t')
+
+        comb_stats_df = generate_hard_calls(
+            comb_stats_df, 
+            non_error_hap_df, 
+            test_samples,
+            results_dfs, 
+            true_multi_targets, 
+            args.nn_assignment_threshold,
+            args.medium_contamination_read_count_threshold,
+            args.medium_contamination_multi_allelic_threshold,
+            args.high_contamination_multi_allelic_threshold
         )
 
-    results_dfs, test_samples = perform_nn_assignment_samples(
-        non_error_hap_df, 
-        ref_hap_df, 
-        nndict, 
-        allele_freqs, 
-        args.allelism_normalisation
-    )
-    for level in ['coarse', 'int', 'fine']:
-        results_dfs[level].to_csv(f'{args.outdir}/assignment_{level}.tsv', sep='\t')
-
-    comb_stats_df = generate_hard_calls(
-        comb_stats_df, 
-        non_error_hap_df, 
-        test_samples,
-        results_dfs, 
-        true_multi_targets, 
-        args.nn_assignment_threshold,
-        args.medium_contamination_read_count_threshold,
-        args.medium_contamination_multi_allelic_threshold,
-        args.high_contamination_multi_allelic_threshold
-    )
-
-    comb_stats_df['nn_ref'] = args.reference_version
-    logging.info(f'writing assignment results to {args.outdir}')
-    comb_stats_df[[
-        'sample_id',
-        'run_id',
-        'multiallelic_mosq_targets',
-        'mosq_reads',
-        'mosq_targets_recovered',
-        'nn_assignment',
-        'res_coarse',
-        'res_int',
-        'res_fine',
-        'contamination_risk',
-        'nn_species_call',
-        'nn_call_method',
-        'nn_ref'
-    ]].to_csv(f'{args.outdir}/nn_assignment.tsv', index=False, sep='\t')
+        comb_stats_df['nn_ref'] = args.reference_version
+        logging.info(f'writing assignment results to {args.outdir}')
+        comb_stats_df[[
+            'sample_id',
+            'run_id',
+            'multiallelic_mosq_targets',
+            'mosq_reads',
+            'mosq_targets_recovered',
+            'nn_assignment',
+            'res_coarse',
+            'res_int',
+            'res_fine',
+            'contamination_risk',
+            'nn_species_call',
+            'nn_call_method',
+            'nn_ref'
+        ]].to_csv(nn_assignment_fn, index=False, sep='\t')
     
     summary_text = generate_summary(comb_stats_df, version_name)
     logging.info(f'writing summary file to {args.outdir}')
-    with open(f'{args.outdir}/summary.txt', 'w') as fn:
+    with open(f'{args.outdir}/nn_summary.txt', 'w') as fn:
         fn.write(summary_text)
 
     if not args.no_plotting:
@@ -672,6 +699,10 @@ def main():
                         help='Length of k-mers to use. Note that NNoVAE has been developed and tested for k=8, '
                         'so accuracy of results cannot be guaranteed with other values of k. Default: k=8',
                         default=8, type=int)
+    parser.add_argument('--resume',
+                        help='Do not re-generate nn_dist_to_ref.tsv and nn_assignment.tsv '
+                        'if those are present in the output directory',
+                        action='store_true', default=False)
     parser.add_argument('-v', '--verbose',
                         help='Include INFO level log messages',
                         action='store_true')
