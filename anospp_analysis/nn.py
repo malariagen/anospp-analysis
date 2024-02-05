@@ -529,7 +529,7 @@ def nn(args):
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-    logging.info(f'starting NN assignment for {comb_stats_df.sample_id.nunique()} samples on current run')
+    logging.info(f'starting NN assignment for {comb_stats_df.sample_id.nunique()} samples in run {run_id}')
     mosq_hap_df = prep_mosquito_haps(
         hap_df,
         args.hap_read_count_threshold,
@@ -616,7 +616,7 @@ def nn(args):
         )
 
         comb_stats_df['nn_ref'] = args.reference_version
-        logging.info(f'writing assignment results to {args.outdir}')
+        logging.info(f'writing assignment results to {nn_assignment_fn}')
         comb_stats_df[[
             'sample_id',
             'run_id',
@@ -634,8 +634,9 @@ def nn(args):
         ]].to_csv(nn_assignment_fn, index=False, sep='\t')
     
     summary_text = generate_summary(comb_stats_df, version_name)
-    logging.info(f'writing summary file to {args.outdir}')
-    with open(f'{args.outdir}/nn_summary.txt', 'w') as fn:
+    summary_fn = f'{args.outdir}/nn_summary.txt'
+    logging.info(f'writing summary file to {summary_fn}')
+    with open(summary_fn, 'w') as fn:
         fn.write(summary_text)
 
     if not args.no_plotting:
