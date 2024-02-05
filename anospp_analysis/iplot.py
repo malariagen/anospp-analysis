@@ -88,17 +88,16 @@ def view_alignment(aln, aln_view_fn, fontsize='9pt', plot_width=1200):
     p = gridplot([[p],[p1]], toolbar_location='below')
     save(p)
 
-def plot_plate_view(df, out_fn, target, reference_path, title=None):
+def plot_plate_view(df, out_fn, reference_path, title=None):
 
     '''
     Plots a plate map for a given plate and Plasmodium type.
 
     Args:
-    - df (pandas.DataFrame): The DataFrame to plot.
-    - out_fn (str): The name of the file to save the plot to
-    - target (str): The name of the target (e.g. 'P1', 'P2').
-    - reference_path (str): The path to the reference directory
-    - title (str): The title for the plot. Default is None.
+    - df (pandas.DataFrame): DataFrame to plot.
+    - out_fn (str): name of the file to save the plot
+    - reference_path (str): path to the reference directory
+    - title (str): title for the plot. Default is None.
 
     Returns:
     None.
@@ -119,8 +118,9 @@ def plot_plate_view(df, out_fn, target, reference_path, title=None):
     # display values
     df['P1_hapids_disp'] = df['P1_hapids_pass'].str.replace(',.*', '...', regex=True)
     df['P2_hapids_disp'] = df['P2_hapids_pass'].str.replace(',.*', '...', regex=True)
+    df['comb_hapids_disp'] = df['P1_hapids_disp'] + '\n' + df['P2_hapids_disp']
 
-    #load the datframe into the source
+    #load the dataframe into the source
     source = ColumnDataSource(df)
 
     #set up the figure
@@ -145,7 +145,7 @@ def plot_plate_view(df, out_fn, target, reference_path, title=None):
 
     #load colors
     if not os.path.isfile(f'{reference_path}/species_colours.csv'):
-        logging.warning('No colors defined for plotting.')
+        logging.warning('no colors defined for plotting')
         cmap = {}
     else:
         colors = pd.read_csv(f'{reference_path}/species_colours.csv')
@@ -156,7 +156,7 @@ def plot_plate_view(df, out_fn, target, reference_path, title=None):
         # Assign grey color to data with more than one species
         if len(row['plasmodium_species'].split(',')) > 1:
             cmap[row['plasmodium_species']] = '#cfcfcf'
-        # Assign white color to data with more than one species
+        # Assign white color to data with no species
         elif len(row['plasmodium_species']) == 0:
             cmap[row['plasmodium_species']] = '#ffffff'
 
@@ -175,12 +175,7 @@ def plot_plate_view(df, out_fn, target, reference_path, title=None):
     #add the species count text for each field
     text_props = {'source': source, 'text_align': 'left', 'text_baseline': 'middle'}
     x = dodge('row', -0.4, range=p.x_range)
-    if target == 'P1':
-        r = p.text(x=x, y='col', text='P1_hapids_disp', **text_props)
-    elif target == 'P2':
-        r = p.text(x=x, y='col', text='P2_hapids_disp', **text_props)
-    else:
-        raise ValueError(f'target {target} is not recognised. Expected targets: P1, P2')
+    r = p.text(x=x, y='col', text='comb_hapids_disp', **text_props)
     r.glyph.text_font_size = '10px'
     r.glyph.text_font_style = 'bold'
 
@@ -192,9 +187,11 @@ def plot_plate_view(df, out_fn, target, reference_path, title=None):
         ('P1 haplotype ID', '@P1_hapids_pass'),
         ('Total P1 read count', '@P1_reads_total'),
         ('QC pass P1 read count', '@P1_reads_pass'),
+        ('P1 contamination haplotype ID', '@P1_hapids_contam'),
         ('P2 haplotype ID', '@P2_hapids_pass'),
         ('Total P2 read count', '@P2_reads_total'),
         ('QC pass P2 read count', '@P2_reads_pass'),
+        ('P2 contamination haplotype ID', '@P2_hapids_contam'),
     ]))
 
     #set up the rest of the figure and save the plot

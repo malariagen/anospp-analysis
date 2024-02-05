@@ -176,8 +176,8 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
     for i, t in enumerate(PLASM_TARGETS):
         t_hap_df = sum_hap_df[sum_hap_df.target == t]
         t_sum_hap_gbs = t_hap_df.groupby('sample_id')
-        # sum_samples_df[f'{t}_reads_total'] = t_sum_hap_gbs['reads'].sum()
-        # sum_samples_df[f'{t}_reads_total'] = sum_samples_df[f'{t}_reads_total'].fillna(0).astype(int)
+        sum_samples_df[f'{t}_reads_total'] = t_sum_hap_gbs['reads'].sum()
+        sum_samples_df[f'{t}_reads_total'] = sum_samples_df[f'{t}_reads_total'].fillna(0).astype(int)
         # pass criteria:
         # - read count over filter value
         # - haplotype is not high confidence affected by contamination
@@ -297,17 +297,20 @@ def plasm(args):
         'lims_plate_id',
         'lims_well_id',
         'plate_id',
-        'well_id'
+        'well_id',
+        'P1_reads_total',
+        'P2_reads_total'
     ]).to_csv(f'{args.outdir}/plasm_assignment.tsv', sep='\t')
 
     if args.interactive_plotting:
-        for t in PLASM_TARGETS:
+        for lims_plate in sum_samples_df.lims_plate_id.unique():
 
-            logging.info(f'plotting interactive lims plate view for {t}')
+            logging.info(f'plotting interactive lims plate view for {lims_plate}')
             
-            out_fn = f'{args.outdir}/spp_{t}_lims_plate.html'
-            title = f'Plasmodium species composition run {run_id}, target {t}'
-            plot_plate_view(sum_samples_df, out_fn, t, ref_dir, title)
+            out_fn = f'{args.outdir}/plasm_{lims_plate}.html'
+            title = f'Plasmodium species composition run {run_id}, plate {lims_plate}'
+            plot_df = sum_samples_df[sum_samples_df.lims_plate_id == lims_plate]
+            plot_plate_view(plot_df, out_fn, ref_dir, title)
 
     logging.info('ANOSPP plasm complete')
 
