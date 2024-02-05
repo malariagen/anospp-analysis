@@ -128,7 +128,7 @@ def plot_sample_target_heatmap(hap_df, samples_df, col, run_id):
 
     return fig, axs
 
-def plot_sample_filtering(comb_stats_df, run_id):
+def plot_sample_filtering(comb_stats_df, run_id, anospp=True):
     
     logging.info('plotting per-sample filtering barplots')
 
@@ -142,9 +142,13 @@ def plot_sample_filtering(comb_stats_df, run_id):
         ('DADA2_nonchim_reads','unassigned to amplicons'),
         # legacy post-filter disabled in prod
         # ('DADA2_final_reads','unassigned to amplicons'),
-        ('target_reads','Plasmodium reads'),
-        ('raw_mosq_reads','mosquito reads')
         ])
+
+    if anospp:
+        dada2_cols['target_reads'] = 'Plasmodium reads'
+        dada2_cols['raw_mosq_reads'] = 'mosquito reads'
+    else:
+        dada2_cols['target_reads'] = 'Target reads'
     
     plates = comb_stats_df.plate_id.unique()
     nplates = len(plates)
@@ -381,7 +385,7 @@ def qc(args):
 
     setup_logging(verbose=args.verbose)
 
-    os.makedirs(args.outdir, exist_ok = True)
+    os.makedirs(args.outdir, exist_ok=True)
     
     logging.info('ANOSPP QC data import')
 
@@ -415,22 +419,23 @@ def qc(args):
     #     fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col, run_id)
     #     fig.savefig(f'{args.outdir}/sample_target_{col}.png')
 
-    fig, _ = plot_sample_filtering(comb_stats_df, run_id)
+    fig, _ = plot_sample_filtering(comb_stats_df, run_id, anospp)
     fig.savefig(f'{args.outdir}/filter_per_sample.png')
 
-    fig, _ = plot_plate_stats(comb_stats_df, run_id, lims_plate=False)
-    fig.savefig(f'{args.outdir}/plate_stats.png')
-
-    fig, _ = plot_plate_summaries(comb_stats_df, run_id, lims_plate=False)
-    fig.savefig(f'{args.outdir}/plate_summaries.png')
-
-    fig, _ = plot_plate_summaries(comb_stats_df, run_id, lims_plate=True)
-    fig.savefig(f'{args.outdir}/lims_plate_summaries.png')
-
-    fig, _ = plot_sample_success(comb_stats_df, run_id, anospp=anospp)
-    fig.savefig(f'{args.outdir}/sample_success.png')
-
+    # set of plots tweaked for anospp only 
     if anospp:
+        fig, _ = plot_plate_stats(comb_stats_df, run_id, lims_plate=False)
+        fig.savefig(f'{args.outdir}/plate_stats.png')
+
+        fig, _ = plot_plate_summaries(comb_stats_df, run_id, lims_plate=False)
+        fig.savefig(f'{args.outdir}/plate_summaries.png')
+
+        fig, _ = plot_plate_summaries(comb_stats_df, run_id, lims_plate=True)
+        fig.savefig(f'{args.outdir}/lims_plate_summaries.png')
+
+        fig, _ = plot_sample_success(comb_stats_df, run_id, anospp=anospp)
+        fig.savefig(f'{args.outdir}/sample_success.png')
+
         fig, _ = plot_plasm_balance(comb_stats_df, run_id)
         fig.savefig(f'{args.outdir}/plasm_balance.png')
 
@@ -470,7 +475,7 @@ def qc(args):
             elif col == 'unassigned_asvs':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = max(comb_stats_df[col])
-            elif col == 'filter_rate':
+            elif col == 'overall_filter_rate':
                 heatmap_kwargs['vmin'] = 0
                 heatmap_kwargs['vmax'] = 1
                 heatmap_kwargs['fmt'] = '.2f'

@@ -64,7 +64,11 @@ def run_blast(plasm_hap_df, outdir, blastdb, min_pident):
     blast_df = pd.read_csv(f'{outdir}/plasm_blastout.tsv', sep='\t', names=BLAST_COLS.split())
 
     # not handling multiple blast hits for now
-    assert blast_df.qseqid.is_unique, f'multiple blast hits found, see {outdir}/plasm_blastout.tsv'
+    multi_hits = blast_df.qseqid.duplicated()
+    if multi_hits.any():
+        multi_hits_haps = blast_df.qseqid[multi_hits].to_list()
+        logging.warning(f'multiple blast hits found for {multi_hits_haps}, retaining only first hit for analysis')
+        blast_df = blast_df[~ multi_hits]
 
     # annotate blast results
     blast_df['genus'] = blast_df.sseqid.str.split('_').str.get(0)

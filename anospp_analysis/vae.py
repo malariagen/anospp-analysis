@@ -675,6 +675,7 @@ def vae(args):
         ch_assignment_df = pd.DataFrame(columns = [
             'mean1', 'mean2', 'mean3', 'sd1', 'sd2', 'sd3', 'vae_species'
             ])
+        ch_assignment_df.index.name = 'sample_id'
 
     else:
         kmer_table = prep_kmers(vae_hap_df, vae_samples, K)

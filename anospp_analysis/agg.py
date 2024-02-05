@@ -17,7 +17,7 @@ def agg(args):
     nn_df = pd.read_csv(args.nn, sep='\t')
     vae_df = pd.read_csv(args.vae, sep='\t')
 
-    logging.info("Merging result tables")
+    logging.info("Merging results tables")
 
     assert set(manifest_df.sample_id) == set(qc_df.sample_id), \
         'lanelets manifest and QC samples do not match'

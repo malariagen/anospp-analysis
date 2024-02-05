@@ -46,9 +46,6 @@ def get_deplex_df(deplex_dir):
     # iterate over deplexed fasta files
     for fa in sorted(glob.glob(f'{deplex_dir}/ASV_*.fa')):
         target = fa.split('/')[-1].split('.')[0].split('_', maxsplit=1)[1]
-        if target not in CUTADAPT_TARGETS:
-            logging.warning(f'target {target} not recognized for {fa}')
-        #     continue
         # basic parser
         with open(fa) as f:
             for line in f:
@@ -84,6 +81,8 @@ def get_hap_df(dada_table, demult_dir):
             var_name='sample_id',
             value_name='reads')
     hap_df['target'] = hap_df.target.astype(str)
+    if not hap_df['target'].isin(CUTADAPT_TARGETS).all():
+        logging.warning('non-ANOSPP targets detected in demultiplexing')
     hap_df.rename(columns={
         'sequence':'untrimmed_sequence',
         'trimmed_sequence':'consensus'

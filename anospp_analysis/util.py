@@ -13,9 +13,9 @@ def setup_logging(verbose=False):
     except:
         pass
     if verbose:
-        logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+        logging.basicConfig(level=logging.INFO, format='[%(levelname)s] [%(asctime)s] %(message)s')
     else:
-        logging.basicConfig(level=logging.WARNING, format='[%(levelname)s] %(message)s')
+        logging.basicConfig(level=logging.WARNING, format='[%(levelname)s] [%(asctime)s] %(message)s')
 
 def well_id_mapper():
     '''
@@ -159,7 +159,7 @@ def prep_hap(hap_fn, anospp=True):
                                         categories=CUTADAPT_TARGETS, 
                                         ordered=True)
     else:
-        logging.warning('unexpected targets found, targets order will be unstable')
+        logging.warning('non-ANOSPP targets detected in haps, targets order might be unstable')
     
     hap_df.sort_values(by=[
         'sample_id',
@@ -353,6 +353,7 @@ def combine_stats(stats_df, hap_df, samples_df):
     comb_stats_df['target_reads'] = comb_stats_df['target_reads'].fillna(0).astype(int)
 
     comb_stats_df['overall_filter_rate'] = comb_stats_df['target_reads'] / comb_stats_df['total_reads']
+    comb_stats_df['overall_filter_rate'] = comb_stats_df['overall_filter_rate'].fillna(0)
 
     comb_stats_df['unassigned_asvs'] = hap_df[hap_df.target == 'unknown'] \
         .groupby('sample_id')['consensus'].nunique()
