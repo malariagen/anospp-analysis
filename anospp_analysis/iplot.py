@@ -136,11 +136,13 @@ def plot_plate_view(df, out_fn, reference_path, title=None):
 
     # add grid lines
     for v in range(len(rows)):
-        vline = Span(location=v, dimension='height', line_color='black')
+        line_width = 2 if (v % 2 == 0) else 1
+        vline = Span(location=v, dimension='height', line_color='black', line_width=line_width)
         p.renderers.extend([vline])
 
     for h in range(len(cols)):
-        hline = Span(location=h, dimension='width', line_color='black')
+        line_width = 2 if (h % 2 == 0) else 1
+        hline = Span(location=h, dimension='width', line_color='black', line_width=line_width)
         p.renderers.extend([hline])
 
     #load colors
@@ -183,15 +185,25 @@ def plot_plate_view(df, out_fn, reference_path, title=None):
     p.add_tools(HoverTool(tooltips=[
         ('sample id', '@{sample_id}'),
         ('Parasite species', '@plasmodium_species'),
-        ('Detection status', '@plasmodium_status'),
-        ('P1 haplotype ID', '@P1_hapids_pass'),
-        ('Total P1 read count', '@P1_reads_total'),
-        ('QC pass P1 read count', '@P1_reads_pass'),
-        ('P1 contamination haplotype ID', '@P1_hapids_contam'),
-        ('P2 haplotype ID', '@P2_hapids_pass'),
-        ('Total P2 read count', '@P2_reads_total'),
-        ('QC pass P2 read count', '@P2_reads_pass'),
-        ('P2 contamination haplotype ID', '@P2_hapids_contam'),
+        ('Detection status', '@plasmodium_detection_status'),
+        ('P1 total reads', '@P1_reads_total'),
+        ('P1 QC pass reads', '@P1_reads_pass'),
+        ('P1 QC pass haplotype IDs', '@P1_hapids_pass'),
+        ('P1 reads per QC pass haplotype', '@P1_hapids_pass_reads'),
+        ('P1 species assignments for pass haplotypes', '@P1_species_assignments_pass'),
+        ('P1 contamination haplotype IDs', '@P1_hapids_contam'),
+        ('P1 reads per contamination haplotype', '@P1_hapids_contam_reads'),
+        ('P1 low coverage haplotype IDs', '@P1_hapids_locov'),
+        ('P1 reads per low coverage haplotype', '@P1_hapids_locov_reads'),
+        ('P2 total reads', '@P2_reads_total'),
+        ('P1 QC pass reads', '@P2_reads_pass'),
+        ('P2 QC pass haplotype IDs', '@P2_hapids_pass'),
+        ('P2 reads per QC pass haplotype', '@P2_hapids_pass_reads'),
+        ('P2 species assignments for pass haplotypes', '@P2_species_assignments_pass'),
+        ('P2 contamination haplotype IDs', '@P2_hapids_contam'),
+        ('P2 reads per contamination haplotype', '@P2_hapids_contam_reads'),
+        ('P2 low coverage haplotype IDs', '@P2_hapids_locov'),
+        ('P2 reads per low coverage haplotype', '@P2_hapids_locov_reads'),
     ]))
 
     #set up the rest of the figure and save the plot
