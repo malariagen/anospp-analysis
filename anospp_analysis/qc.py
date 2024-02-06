@@ -148,7 +148,7 @@ def plot_sample_filtering(comb_stats_df, run_id, anospp=True):
         dada2_cols['target_reads'] = 'Plasmodium reads'
         dada2_cols['raw_mosq_reads'] = 'mosquito reads'
     else:
-        dada2_cols['target_reads'] = 'Target reads'
+        dada2_cols['target_reads'] = 'target reads'
     
     plates = comb_stats_df.plate_id.unique()
     nplates = len(plates)
@@ -222,8 +222,9 @@ def plot_plate_stats(comb_stats_df, run_id, lims_plate=False):
     axs[1].set_ylim(bottom=0, top=62)
     axs[1].set_xticklabels([])
     axs[1].set_xlabel('')
-    # 30 targets cutoff
-    axs[1].axhline(30, c='silver', alpha=.5)
+    # 10/50 targets cutoff - nn/vae
+    axs[1].axhline(10, c='silver', alpha=.5)
+    axs[1].axhline(50, c='silver', alpha=.5)
 
     sns.stripplot(
         data=comb_stats_df,
@@ -252,14 +253,14 @@ def plot_plate_summaries(comb_stats_df, run_id, lims_plate=False):
     
     # success rate definition
     comb_stats_df['over 1000 mosquito reads'] = comb_stats_df.raw_mosq_reads > 1000
-    comb_stats_df['over 30 targets'] = comb_stats_df.targets_recovered > 30
+    comb_stats_df['over 10 targets'] = comb_stats_df.targets_recovered > 10
     comb_stats_df['over 50% reads retained'] = comb_stats_df.overall_filter_rate > .5
 
     plates = comb_stats_df[plate_col].unique()
     nplates = comb_stats_df[plate_col].nunique()
 
     sum_df = comb_stats_df.groupby(plate_col) \
-        [['over 1000 mosquito reads', 'over 30 targets','over 50% reads retained']].sum()
+        [['over 1000 mosquito reads', 'over 10 targets','over 50% reads retained']].sum()
     y = comb_stats_df.groupby(plate_col)['over 1000 mosquito reads'].count()
     sum_df = sum_df.divide(y, axis=0).reindex(plates)
 
@@ -278,11 +279,11 @@ def plot_sample_success(comb_stats_df, run_id, anospp=True):
 
     logging.info('plotting sample success')
 
-    xcol = 'raw_mosq_targets_recovered' if anospp else 'targets_recovered'
+    ycol = 'raw_mosq_targets_recovered' if anospp else 'targets_recovered'
 
     fig, axs = plt.subplots(1, 2, figsize=(12,6), constrained_layout=True)
     fig.suptitle(f'Key stats covariation for run {run_id}')
-    for ycol, ax in zip(('raw_mosq_reads', 'overall_filter_rate'), axs):
+    for xcol, ax in zip(('raw_mosq_reads', 'overall_filter_rate'), axs):
         sns.scatterplot(
             data=comb_stats_df,
             x=xcol,
@@ -291,15 +292,16 @@ def plot_sample_success(comb_stats_df, run_id, anospp=True):
             alpha=.5, 
             ax=ax
             )
-        ax.set_xlim(left=0)
+        ax.set_ylim(bottom=0)
         if anospp:
-            ax.axvline(30, c='silver', alpha=.5)
-            ax.set_xlim(right=62)
-    axs[0].set_yscale('log')
-    axs[0].set_ylim(bottom=1)
-    axs[0].axhline(1000, c='silver', alpha=.5)
-    axs[1].axhline(.5, c='silver', alpha=.5)
-    axs[1].set_ylim(bottom=0, top=1)
+            ax.axhline(10, c='silver', alpha=.5)
+            ax.axhline(50, c='silver', alpha=.5)
+            ax.set_ylim(top=62)
+    axs[0].set_xscale('log')
+    axs[0].set_xlim(left=1)
+    axs[0].axvline(1000, c='silver', alpha=.5)
+    axs[1].axvline(.5, c='silver', alpha=.5)
+    axs[1].set_xlim(left=0, right=1)
     axs[1].get_legend().remove()
 
     return fig, axs
@@ -308,8 +310,12 @@ def plot_plasm_balance(comb_stats_df, run_id):
 
     logging.info('plotting Plasmodium read balance')
 
-    max_plasm_reads = max(comb_stats_df.P1_reads.max(), 
-                          comb_stats_df.P2_reads.max())
+    max_plasm_reads = max(
+        max(
+            comb_stats_df.P1_reads.max(), 
+            comb_stats_df.P2_reads.max()
+            ),
+        1)
 
     fig, ax = plt.subplots(1, 1, figsize=(5, 5), constrained_layout=True)
     fig.suptitle(f'P1/P2 coverage balance for run {run_id}')
@@ -321,8 +327,15 @@ def plot_plasm_balance(comb_stats_df, run_id):
         alpha=.5, 
         ax=ax
         )
+    # hard filter cutoff
     ax.axhline(10, c='silver', alpha=.5)
     ax.axvline(10, c='silver', alpha=.5)
+    # contamination affected sample cutoff
+    ax.axhline(100, c='green', alpha=.5, linestyle='dashed')
+    ax.axvline(100, c='green', alpha=.5, linestyle='dashed')
+    # contamination source sample cutoff
+    ax.axhline(10000, c='red', alpha=.5, linestyle='dashed')
+    ax.axvline(10000, c='red', alpha=.5, linestyle='dashed')
     ax.plot(
         [0.9, max_plasm_reads],
         [0.9, max_plasm_reads],
