@@ -430,7 +430,7 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
             ].map(leveldict)
     
     #Rainbow samples
-    is_rainbow = (comb_stats_df.nn_species_call.isnull() & comb_stats_df.nn_assignment == 'yes')
+    is_rainbow = (comb_stats_df.nn_species_call.isnull() & (comb_stats_df.nn_assignment == 'yes'))
     comb_stats_df.loc[is_rainbow, 'nn_call_method'] = 'NN'
     comb_stats_df.loc[is_rainbow, 'nn_species_call'] = 'RAINBOW_SAMPLE'
 
@@ -439,8 +439,8 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
     comb_stats_df.loc[is_not_id, 'nn_call_method'] = 'TOO_FEW_TARGETS'
     comb_stats_df.loc[is_not_id, 'nn_species_call'] = 'TOO_FEW_TARGETS'
 
-    # assert not comb_stats_df.nn_species_call.isnull().any(), 'some samples not assigned'
-    # assert not comb_stats_df.nn_call_method.isnull().any(), 'some samples not assigned'
+    assert not comb_stats_df.nn_species_call.isnull().any(), 'some samples not assigned'
+    assert not comb_stats_df.nn_call_method.isnull().any(), 'some samples not assigned'
 
     return comb_stats_df
 
@@ -641,15 +641,19 @@ def nn(args):
 
     if not args.no_plotting:
         for level in ['coarse', 'int', 'fine']:
-            fig, _ = plot_assignment_proportions(
-                comb_stats_df, 
-                results_dfs[level], 
-                level, 
-                colors[level], 
-                args.nn_assignment_threshold,
-                run_id
-                )
-            fig.savefig(f'{args.outdir}/{level}_assignment.png', bbox_inches='tight')
+            fig_fn = f'{args.outdir}/{level}_assignment.png'
+            if args.resume and os.path.isfile(fig_fn):
+                logging.warning(f'nn figure {fig_fn} exists, not re-genrating')
+            else:
+                fig, _ = plot_assignment_proportions(
+                    comb_stats_df, 
+                    results_dfs[level], 
+                    level, 
+                    colors[level], 
+                    args.nn_assignment_threshold,
+                    run_id
+                    )
+                fig.savefig(fig_fn, bbox_inches='tight')
 
     logging.info('ANOSPP NN complete')
 
