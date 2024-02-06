@@ -173,6 +173,7 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
         'well_id'
     ]].copy().set_index('sample_id')
 
+    sum_hap_df['reads_str'] = sum_hap_df['reads'].astype(str)
     for i, t in enumerate(PLASM_TARGETS):
         t_hap_df = sum_hap_df[sum_hap_df.target == t]
         t_sum_hap_gbs = t_hap_df.groupby('sample_id')
@@ -189,10 +190,11 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
         sum_samples_df[f'{t}_reads_pass'] = sum_samples_df[f'{t}_reads_pass'].fillna(0).astype(int)
         sum_samples_df[f'{t}_hapids_pass'] = t_pass_hap_gbs.agg({'hap_seqid': ','.join})
         sum_samples_df[f'{t}_hapids_pass'] = sum_samples_df[f'{t}_hapids_pass'].fillna('')
-        sum_samples_df[f'{t}_hapids_pass_reads'] = t_pass_hap_gbs.apply(lambda x: ','.join(str(r) for r in x.reads))
+        sum_samples_df[f'{t}_hapids_pass_reads'] = t_pass_hap_gbs.agg({'reads_str': ','.join})
         sum_samples_df[f'{t}_hapids_pass_reads'] = sum_samples_df[f'{t}_hapids_pass_reads'].fillna('')
         sum_samples_df[f'{t}_species_assignments_pass'] = t_pass_hap_gbs.agg(
-            {'species_assignment': ','.join})
+            {'species_assignment': ','.join}
+            )
         sum_samples_df[f'{t}_species_assignments_pass'] = sum_samples_df[f'{t}_species_assignments_pass'].fillna('')
         # contaminated haplotypes with read count over filter value
         t_contam_hap_gbs = t_hap_df[
@@ -202,7 +204,7 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
             ].sort_values('reads', ascending=False).groupby('sample_id')
         sum_samples_df[f'{t}_hapids_contam'] = t_contam_hap_gbs.agg({'hap_seqid': ','.join})
         sum_samples_df[f'{t}_hapids_contam'] = sum_samples_df[f'{t}_hapids_contam'].fillna('')
-        sum_samples_df[f'{t}_hapids_contam_reads'] = t_contam_hap_gbs.apply(lambda x: ','.join(str(r) for r in x.reads))
+        sum_samples_df[f'{t}_hapids_contam_reads'] = t_contam_hap_gbs.agg({'reads_str': ','.join})
         sum_samples_df[f'{t}_hapids_contam_reads'] = sum_samples_df[f'{t}_hapids_contam_reads'].fillna('')
         # low coverage haplotypes
         t_locov_hap_gbs = t_hap_df[
@@ -210,7 +212,7 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
             ].sort_values('reads', ascending=False).groupby('sample_id')
         sum_samples_df[f'{t}_hapids_locov'] = t_locov_hap_gbs.agg({'hap_seqid': ','.join})
         sum_samples_df[f'{t}_hapids_locov'] = sum_samples_df[f'{t}_hapids_locov'].fillna('')
-        sum_samples_df[f'{t}_hapids_locov_reads'] = t_locov_hap_gbs.apply(lambda x: ','.join(str(r) for r in x.reads))
+        sum_samples_df[f'{t}_hapids_locov_reads'] = t_locov_hap_gbs.agg({'reads_str': ','.join})
         sum_samples_df[f'{t}_hapids_locov_reads'] = sum_samples_df[f'{t}_hapids_locov_reads'].fillna('')
 
     def infer_status(sum_samples_row, targets=PLASM_TARGETS):
