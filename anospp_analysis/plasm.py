@@ -178,7 +178,7 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
         t_hap_df = sum_hap_df[sum_hap_df.target == t]
         t_sum_hap_gbs = t_hap_df.groupby('sample_id')
         sum_samples_df[f'{t}_reads_total'] = t_sum_hap_gbs['reads'].sum()
-        sum_samples_df[f'{t}_reads_total'] = sum_samples_df[f'{t}_reads_total'].fillna(0).astype(int)
+        sum_samples_df[f'{t}_reads_total'] = sum_samples_df[f'{t}_reads_total'].astype(float).fillna(0).astype(int)
         # pass criteria:
         # - read count over filter value
         # - haplotype is not high confidence affected by contamination
@@ -187,7 +187,7 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
             (t_hap_df.contamination_confidence != 'high')
             ].sort_values('reads', ascending=False).groupby('sample_id')
         sum_samples_df[f'{t}_reads_pass'] = t_pass_hap_gbs['reads'].sum()
-        sum_samples_df[f'{t}_reads_pass'] = sum_samples_df[f'{t}_reads_pass'].fillna(0).astype(int)
+        sum_samples_df[f'{t}_reads_pass'] = sum_samples_df[f'{t}_reads_pass'].astype(float).fillna(0).astype(int)
         sum_samples_df[f'{t}_hapids_pass'] = t_pass_hap_gbs.agg({'hap_seqid': ','.join})
         sum_samples_df[f'{t}_hapids_pass'] = sum_samples_df[f'{t}_hapids_pass'].fillna('')
         sum_samples_df[f'{t}_hapids_pass_reads'] = t_pass_hap_gbs.agg({'reads_str': ','.join})

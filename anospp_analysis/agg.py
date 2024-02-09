@@ -5,6 +5,98 @@ import argparse
 
 from anospp_analysis.util import *
 
+def validate_aggregation(comb_df):
+
+    logging.info('data types checks')
+
+    for col in [
+        'sample_id', 'irods_path', 'id_library_lims', 'id_study_lims',
+        'sanger_sample_id', 'run_id', 'lane_index', 'tag_index', 'plate_id',
+        'well_id', 'lims_plate_id', 'lims_well_id', 'sample_name',
+        'total_reads', 'readthrough_pass_reads', 'DADA2_input_reads',
+        'DADA2_filtered_reads', 'DADA2_denoised_reads', 'DADA2_merged_reads',
+        'DADA2_nonchim_reads', 'target_reads', 'overall_filter_rate',
+        'unassigned_asvs', 'targets_recovered', 'raw_mosq_targets_recovered',
+        'raw_multiallelic_mosq_targets', 'raw_mosq_reads', 'P1_reads', 'P2_reads', 
+        'P1_reads_pass', 'P2_reads_pass', 'plasmodium_detection_status', 'plasm_ref',
+        # skip plasm hap
+        'multiallelic_mosq_targets', 'mosq_reads', 'mosq_targets_recovered',
+        'nn_assignment', 'contamination_risk', 'nn_species_call', 'nn_call_method', 'nn_ref',
+        # skip vae
+        'nnovae_mosquito_species', 'nnovae_call_method'
+        ]:
+        assert ~comb_df[col].isna().any(), f'missing {col} values found'
+
+    for col in [
+        'run_id', 'lane_index', 'tag_index',
+        'total_reads', 'readthrough_pass_reads', 'DADA2_input_reads',
+        'DADA2_filtered_reads', 'DADA2_denoised_reads', 'DADA2_merged_reads',
+        'DADA2_nonchim_reads', 'target_reads',
+        'unassigned_asvs', 'targets_recovered', 'raw_mosq_targets_recovered',
+        'raw_multiallelic_mosq_targets', 'raw_mosq_reads', 'P1_reads', 'P2_reads', 
+        'P1_reads_pass', 'P2_reads_pass',
+        'multiallelic_mosq_targets', 'mosq_reads', 'mosq_targets_recovered'
+        ]:
+        assert pd.api.types.is_integer_dtype(comb_df[col]), f'{col} datatype is not integer'
+        assert (comb_df[col] >= 0).all(), f'{col} contains negative values'
+
+    for col in ['overall_filter_rate','mean1', 'mean2', 'mean3', 'sd1', 'sd2', 'sd3']:
+        assert pd.api.types.is_numeric_dtype(comb_df[col]) or comb_df[col].empty, f'{col} datatype is not numeric'
+
+    logging.info('columns contents check')
+
+    assert comb_df.sample_id.is_unique, 'duplicated sample_id found'
+
+    assert len(comb_df.run_id.unique()) == 1, 'more than a single run_id found'
+
+    assert comb_df.well_id.isin(well_id_mapper().values()).all(), 'non A1...H12 well_id found'
+
+    assert comb_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'non A1...P24 lims_well_id found'
+
+    for (colp, coln) in [
+        ('total_reads','readthrough_pass_reads'),
+        ('readthrough_pass_reads','DADA2_input_reads'),
+        ('DADA2_input_reads','DADA2_filtered_reads'),
+        ('DADA2_filtered_reads','DADA2_denoised_reads'),
+        ('DADA2_denoised_reads','DADA2_merged_reads'),
+        ('DADA2_merged_reads','DADA2_nonchim_reads'),
+        ('DADA2_nonchim_reads','target_reads'),
+        ('P1_reads', 'P1_reads_pass'),
+        ('P2_reads', 'P2_reads_pass'),
+        ('raw_mosq_reads','mosq_reads'), # issue
+        ('raw_mosq_targets_recovered','mosq_targets_recovered'), # issue
+        ('raw_multiallelic_mosq_targets','multiallelic_mosq_targets')
+        ]:
+        assert (comb_df[colp] >= comb_df[coln]).all(), f'found less reads in {colp} than in {coln}'
+
+    assert ((comb_df.overall_filter_rate >= 0) & (comb_df.overall_filter_rate <= 1)).all(), \
+        'found overall_filter_rate outside of [0,1]'
+
+    assert (comb_df.targets_recovered <= 64).all(), 'over 64 targets_recovered reported'
+
+    for col in [
+        'raw_mosq_targets_recovered','raw_multiallelic_mosq_targets',
+        'multiallelic_mosq_targets','mosq_targets_recovered'
+        ]:
+        assert (comb_df[col] <= 62).all(), f'over 62 {col} reported'
+
+    assert (comb_df.target_reads == comb_df.raw_mosq_reads + comb_df.P1_reads + comb_df.P2_reads).all(), \
+        'target_reads does not match raw_mosq_reads + P1_reads + P2_reads'
+
+    assert (comb_df.query('P1_reads_pass > 10')['P1_hapids_pass'].notna()).all(), \
+        'not all P1 pass records supported by 10 reads have P1_hapids_pass recorded'
+    assert ~((comb_df.P1_reads_pass < 10) & (comb_df.P1_reads_pass > 0)).any(), \
+        'some P1 pass records supported by less than 10 reads'
+    assert (comb_df.query('P1_reads_pass == 0')['P1_hapids_pass'].isna()).all(), \
+        'record with zero P1_reads_pass has some P1_hapids_pass recorded'
+
+    assert (comb_df.query('P2_reads_pass > 10')['P2_hapids_pass'].notna()).all(), \
+        'not all P2 pass records supported by 10 reads have P2_hapids_pass recorded'
+    assert ~((comb_df.P2_reads_pass < 10) & (comb_df.P2_reads_pass > 0)).any(), \
+        'some P2 pass records supported by less than 10 reads'
+    assert (comb_df.query('P2_reads_pass == 0')['P2_hapids_pass'].isna()).all(), \
+        'record with zero P2_reads_pass has some P2_hapids_pass recorded'
+
 def agg(args):
 
     setup_logging(verbose=args.verbose)
@@ -17,7 +109,7 @@ def agg(args):
     nn_df = pd.read_csv(args.nn, sep='\t')
     vae_df = pd.read_csv(args.vae, sep='\t')
 
-    logging.info("Merging results tables")
+    logging.info("merging results tables")
 
     assert set(manifest_df.sample_id) == set(qc_df.sample_id), \
         'lanelets manifest and QC samples do not match'
@@ -37,8 +129,8 @@ def agg(args):
 
     comb_df['nnovae_mosquito_species'] = comb_df.vae_species.fillna(comb_df.nn_species_call)
     is_nocall = comb_df['nnovae_mosquito_species'].isna()
-    # assert ~is_nocall.any(), \
-    #     f'could not find none of NN or VAE call for {comb_df[is_nocall].index.to_list()}'
+    assert ~is_nocall.any(), \
+        f'could not find none of NN or VAE call for {comb_df[is_nocall].index.to_list()}'
     
     comb_df['nnovae_call_method'] = comb_df.nn_call_method
     comb_df.loc[
@@ -46,7 +138,10 @@ def agg(args):
         'nnovae_call_method'
     ] = 'VAE'
 
-    comb_df.to_csv(args.out, sep='\t', index=True)
+    validate_aggregation(comb_df)
+
+    logging.info(f'writing merged results to {args.out}')
+    comb_df.to_csv(args.out, sep='\t', index=False)
 
 
 def main():

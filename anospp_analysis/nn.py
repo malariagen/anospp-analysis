@@ -366,6 +366,8 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets,
                 ) \
             ['sample_id'].unique()
         comb_stats_df.loc[comb_stats_df.sample_id.isin(affected_samples), 'multiallelic_mosq_targets'] -= 1
+    # negative values avoidded
+    comb_stats_df.loc[comb_stats_df.multiallelic_mosq_targets < 0, 'multiallelic_mosq_targets'] = 0
 
     comb_stats_df.loc[
         comb_stats_df.multiallelic_mosq_targets > ma_hi_threshold, 

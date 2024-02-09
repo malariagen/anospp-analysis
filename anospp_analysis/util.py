@@ -122,7 +122,7 @@ def prep_hap(hap_fn, anospp=True):
 
     logging.info(f'preparing haplotypes table from {hap_fn}')
 
-    hap_df = pd.read_csv(hap_fn, sep='\t')
+    hap_df = pd.read_csv(hap_fn, sep='\t', dtype={'target':'str'})
 
     # compatibility with old style haplotype column names
     hap_df.rename(columns=({
@@ -359,8 +359,8 @@ def combine_stats(stats_df, hap_df, samples_df):
         .groupby('sample_id')['consensus'].nunique()
     comb_stats_df['unassigned_asvs'] = comb_stats_df['unassigned_asvs'].fillna(0).astype(int)
     
-    comb_stats_df['targets_recovered'] = hap_df.groupby('sample_id') \
-        ['target'].nunique()
+    comb_stats_df['targets_recovered'] = hap_df[hap_df.target != 'unknown'] \
+        .groupby('sample_id')['target'].nunique()
     comb_stats_df['targets_recovered'] = comb_stats_df['targets_recovered'].fillna(0).astype(int)
     
     comb_stats_df['raw_mosq_targets_recovered'] = hap_df[hap_df.target.isin(MOSQ_TARGETS)] \
