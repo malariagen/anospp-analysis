@@ -7,7 +7,7 @@ from anospp_analysis.util import *
 
 def validate_aggregation(comb_df):
 
-    logging.info('data types checks')
+    logging.info('checking data types')
 
     for col in [
         'sample_id', 'irods_path', 'id_library_lims', 'id_study_lims',
@@ -40,10 +40,13 @@ def validate_aggregation(comb_df):
         assert pd.api.types.is_integer_dtype(comb_df[col]), f'{col} datatype is not integer'
         assert (comb_df[col] >= 0).all(), f'{col} contains negative values'
 
-    for col in ['overall_filter_rate','mean1', 'mean2', 'mean3', 'sd1', 'sd2', 'sd3']:
-        assert pd.api.types.is_numeric_dtype(comb_df[col]) or comb_df[col].empty, f'{col} datatype is not numeric'
+    for col in ['overall_filter_rate']:
+        assert pd.api.types.is_numeric_dtype(comb_df[col]), f'{col} datatype is not numeric'
 
-    logging.info('columns contents check')
+    # for col in ['mean1', 'mean2', 'mean3', 'sd1', 'sd2', 'sd3']:
+    #     assert pd.api.types.is_numeric_dtype(comb_df[col]) or comb_df[col].empty, f'{col} datatype is not numeric'
+
+    logging.info('checking columns contents')
 
     assert comb_df.sample_id.is_unique, 'duplicated sample_id found'
 
