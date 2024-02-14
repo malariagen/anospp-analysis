@@ -31,10 +31,12 @@ SUM_HAP_COLS = [
         'pident',
         'qcovs',
         'species_assignment',
-        'hap_seqid'
+        'hap_seqid',
+        'plate_id',
+        'well_id'
     ]
 
-def run_blast(plasm_hap_df, outdir, blastdb, min_pident):
+def run_blast(plasm_hap_df, outdir, blastdb, max_mismatch, min_qcov):
 
     logging.info('running blast')
 
@@ -75,7 +77,7 @@ def run_blast(plasm_hap_df, outdir, blastdb, min_pident):
     blast_df['species'] = blast_df.sseqid.str.split('_').str.get(1)
     blast_df['binomial'] = blast_df['genus'] + '_' + blast_df['species']
     blast_df['species_assignment'] = blast_df['binomial']
-    unknown_species = (blast_df['pident'] < min_pident)
+    unknown_species = ((blast_df.mismatch > max_mismatch) | (blast_df.qcovs < min_qcov))
     blast_df.loc[unknown_species, 'species_assignment'] = 'unknown'
     blast_df['ref_seqid'] = blast_df.sseqid.str.split(':').str.get(1)
 
@@ -86,7 +88,7 @@ def run_blast(plasm_hap_df, outdir, blastdb, min_pident):
             if blast_row.qcovs == 100:
                 return blast_row.ref_seqid
             # M annotations require lower query coverage
-            elif blast_row.ref_seqid.startswith('M') and blast_row.qcovs>=96:
+            elif blast_row.ref_seqid.startswith('M') and (blast_row.qcovs >= min_qcov):
                 return blast_row.ref_seqid
         
         # use per-per run seqids P1-0 -> X1-0 etc
@@ -281,7 +283,8 @@ def plasm(args):
             plasm_hap_df, 
             args.outdir, 
             blastdb,
-            args.blast_min_pident
+            args.blast_max_mismatch,
+            args.blast_min_qcov
             )
 
         contam_df = estimate_contamination(
@@ -343,9 +346,12 @@ def main():
     parser.add_argument('--blast_db_prefix', 
                         help='Blast database prefix in reference index', 
                         default='plasmomito_P1P2_DB_v1.0')
-    parser.add_argument('--blast_min_pident', 
-                        help='Minimum blast sequence identity for haplotype species assignment. Default: 97',  
-                        default=97, type=int)
+    parser.add_argument('--blast_max_mismatch', 
+                        help='Maximum number of blast alignment mismatches for haplotype assignment to species. Default: 1',  
+                        default=1, type=int)
+    parser.add_argument('--blast_min_qcov', 
+                        help='Minimum blast alignment query coverage for haplotype assignment to species. Default: 96',  
+                        default=96, type=int)
     parser.add_argument('--contam_min_reads_source', 
                         help='Minimum number of reads in a source sample for same plate/well contamination. Default: 10000',  
                         default=10000, type=int)
