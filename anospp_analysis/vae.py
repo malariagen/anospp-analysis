@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from collections import OrderedDict
 import os
 import argparse
 import keras

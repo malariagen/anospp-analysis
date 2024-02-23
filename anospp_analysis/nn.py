@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from collections import OrderedDict
+import matplotlib.patches as mpatches
 import os
 import argparse
 import itertools
@@ -154,7 +154,7 @@ def construct_unique_kmer_table(mosq_hap_df, k):
     kmerdict = construct_kmer_dict(k)
     #subset to unique haplotypes
     uniqueseq = mosq_hap_df[['seqid', 'consensus']].drop_duplicates()
-    #determine shape of table by highest seqid
+    #determine shape of table by top seqid
     parsed_seqids = parse_seqids_series(uniqueseq.seqid)
     maxid = parsed_seqids['uidx'].max() + 1
 
@@ -349,7 +349,7 @@ def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
     return comb_stats_df
 
 def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets,
-                           rc_med_threshold, ma_med_threshold, ma_hi_threshold):
+                           rc_med_threshold, ma_med_threshold, ma_hi_threshold, ma_vh_threshold):
     '''
     estimate contamination from read counts and multiallelic targets
     '''
@@ -367,29 +367,36 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets,
             ['sample_id'].unique()
         comb_stats_df.loc[comb_stats_df.sample_id.isin(affected_samples), 'multiallelic_mosq_targets'] -= 1
 
+    comb_stats_df['contamination_risk'] = 'low'
     comb_stats_df.loc[
-        comb_stats_df.multiallelic_mosq_targets > ma_hi_threshold, 
+        comb_stats_df.mosq_reads < rc_med_threshold,
+        'contamination_risk'
+    ] = 'medium'
+    comb_stats_df.loc[
+        comb_stats_df.multiallelic_mosq_targets > ma_med_threshold,
+        'contamination_risk'
+    ] = 'medium'
+    comb_stats_df.loc[
+        comb_stats_df.multiallelic_mosq_targets > ma_hi_threshold,
         'contamination_risk'
     ] = 'high'
     comb_stats_df.loc[
-        ((comb_stats_df.multiallelic_mosq_targets > ma_med_threshold) & \
-        (comb_stats_df.multiallelic_mosq_targets <= ma_hi_threshold)) | \
-        (comb_stats_df.mosq_reads < rc_med_threshold), 
+        comb_stats_df.multiallelic_mosq_targets > ma_vh_threshold,
         'contamination_risk'
-    ] = 'medium'
-    comb_stats_df.loc[comb_stats_df.contamination_risk.isnull(), 'contamination_risk'] = 'low'
+    ] = 'very_high'
 
     logging.info(
-        f'identified {(comb_stats_df.contamination_risk == "high").sum()} samples with high contamination risk, '
+        f'identified {(comb_stats_df.contamination_risk == "very_high").sum()} samples with very high contamination risk, '
+        f'{(comb_stats_df.contamination_risk == "high").sum()} samples with high contamination risk, '
         f'{(comb_stats_df.contamination_risk == "medium").sum()} samples with medium contamination risk '
         f'and {(comb_stats_df.contamination_risk == "low").sum()} samples with low contamination risk'
         )
 
     return comb_stats_df
 
-def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_dfs, \
-                        true_multi_targets, nn_asgn_threshold, \
-                        rc_med_threshold, ma_med_threshold, ma_hi_threshold):
+def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_dfs,
+                        true_multi_targets, nn_asgn_threshold,
+                        rc_med_threshold, ma_med_threshold, ma_hi_threshold, ma_vh_threshold):
 
     logging.info('generating NN calls from assignment info')
 
@@ -415,7 +422,8 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
         true_multi_targets,
         rc_med_threshold,
         ma_med_threshold,
-        ma_hi_threshold
+        ma_hi_threshold,
+        ma_vh_threshold
     )
 
     comb_stats_df['nn_species_call'] = None
@@ -449,6 +457,7 @@ def generate_summary(comb_stats_df, version_name):
     summary = [
         f'Nearest Neighbour assignment using reference version {version_name}',
         f'On run containing {comb_stats_df.sample_id.nunique()} samples',
+        f'{(comb_stats_df.contamination_risk == "very_high").sum()} samples have very high contamination risk',
         f'{(comb_stats_df.contamination_risk == "high").sum()} samples have high contamination risk',
         f'{(comb_stats_df.contamination_risk == "medium").sum()} samples have medium contamination risk',
         f'{(comb_stats_df.contamination_risk == "low").sum()} samples have low contamination risk',
@@ -462,15 +471,15 @@ def generate_summary(comb_stats_df, version_name):
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_int", "sample_id"].nunique()} '
          'samples with sufficient coverage could not be assigned at intermediate level',
         f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_int") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
-         'of those have medium or high contamination risk',
+         'of those have medium or higher contamination risk',
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_coarse", "sample_id"].nunique()} '
          'samples with sufficient coverage could not be assigned at coarse level',
         f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_coarse") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
-         'of those have medium or high contamination risk'
+         'of those have medium or higher contamination risk'
     ]
     return '\n'.join(summary)
 
-def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id):
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id, plasm_assignment_fn, plasm_colors_fn):
     
     logging.info(f'generating {level_label} level plots')
     #Generate bar plots at given assignment level
@@ -487,29 +496,96 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
                 ]
             )
         ]).fillna(0)
+
+    # contamination color scheme - applied to top ticks 
+    contam_colors = {
+        'low':'#808080',
+        'medium':'#e377c2',
+        'high':'#d62728',
+        'very_high':'#000000'
+    }
+
+    # plasm color scheme - applied to bottom ticks
+    if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+        plasm_df = pd.read_csv(plasm_assignment_fn, sep='\t')
+        plasm_df['plasmodium_species'] = plasm_df['plasmodium_species'].fillna('')
+        plasm_spp = plasm_df.set_index('sample_id')['plasmodium_species'].to_dict()
+        assert set(plasm_spp.keys()) == set(comb_stats_df.sample_id), \
+            'plasmodium assignment samples do not match nn samples'
+
+        plasm_colors = pd.read_csv(plasm_colors_fn).set_index('species')['color']
+        # named species in legend - remove genus name
+        plasm_legend_colors = {sp[11:]:color for sp, color in plasm_colors.iloc[:6].to_dict().items()}
+        # other species collapsed
+        assert plasm_colors.iloc[6:].nunique() == 1, \
+            'plasmodium species color scheme not matching nn plot expectation'
+        plasm_legend_colors['other'] = plasm_colors['unknown']
+        # mixed/uninfected inferred during plotting
+        plasm_legend_colors['mixed'] = '#000000'
+        plasm_legend_colors['none'] = '#808080'
+
+    # plot
     plates = comb_stats_df.plate_id.unique()
     nplates = comb_stats_df.plate_id.nunique()
     fig, axs = plt.subplots(nplates, 1, figsize=(20, 4 * nplates))
     for plate, ax in zip(plates, axs):
-        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy()
+        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().reset_index()
         plot_df['well_id'] = well_ordering(plot_df['well_id'])
         plot_samples = plot_df['sample_id']
         nn_level_result_df.loc[plot_samples].plot(
             kind='bar', stacked=True, width=1, ax=ax, color=level_colors
         )
         ax.axhline(nn_asgn_threshold, color='k', ls=':', linewidth=1)
-        ax.set_xticks(range(plot_df.shape[0]))
-        ax.set_xticklabels(plot_df['sample_name'])
-        ax.tick_params(axis='x', rotation=90)
         ax.set_ylim(0, 1)
         ax.set_yticks([])
         ax.set_ylabel(plate, fontsize=16)
         handles, labels = ax.get_legend_handles_labels()
         ax.get_legend().remove()
+        
+        ax.set_xticks(range(plot_df.shape[0]))
+        ax.set_xticklabels(plot_df['sample_name'])
+        for i, r in plot_df.iterrows():
+            sample_plasm_sp = plasm_spp[r.sample_id]
+            # multiple species infection
+            if len(sample_plasm_sp.split(',')) > 1:
+                ax.get_xticklabels()[i].set_color('black')
+            # species in index
+            elif sample_plasm_sp in plasm_colors.keys():
+                ax.get_xticklabels()[i].set_color(plasm_colors[sample_plasm_sp])
+            # no infection
+            else:
+                ax.get_xticklabels()[i].set_color('grey')
+        ax.tick_params(axis='x', rotation=90)
+        
+        ax2 = ax.twiny()
+        ax2.set_xticks(range(plot_df.shape[0]))
+        ax2.set_xticklabels(plot_df['mosq_targets_recovered'])
+        for i, r in plot_df.iterrows():
+            ax2.get_xticklabels()[i].set_color(contam_colors[r.contamination_risk])
+        ax2.tick_params(axis='x', rotation=90)
+        ax2.set_xlim(ax.get_xlim())
     plt.tight_layout()
-    # add legend after adjusting layout so that it spans multiple subplots
-    # reverse legend order to match barplot order
-    axs[0].legend(handles[::-1], labels[::-1], loc='upper left', bbox_to_anchor=(1,1), fontsize=14)
+    # add legends after adjusting layout so that they span multiple subplots
+    contam_artist = axs[0].legend(
+        handles=[mpatches.Patch(color=color, label=label) for label, color in contam_colors.items()],
+        title='contamination risk (top text)',
+        bbox_to_anchor=(1,1.1), 
+        fontsize=10, 
+        ncols=2
+    )
+    axs[0].add_artist(contam_artist)
+
+    plasm_artist = axs[0].legend(
+        handles=[mpatches.Patch(color=color, label=label) for label, color in plasm_legend_colors.items()],
+        title='Plasmodium (bottom text)',
+        bbox_to_anchor=(1,0.8), 
+        fontsize=10,
+        ncols=2
+    )
+    axs[0].add_artist(plasm_artist)
+
+    # reverse species legend order to match barplot order
+    axs[0].legend(handles[::-1], labels[::-1], loc='upper left', bbox_to_anchor=(1,0.3), fontsize=10)
     # adding title in post - handling margins by savefig's bbox_inches='tight' at this point
     axs[0].set_title(f'NN assignment {level_label} level for run {run_id}', fontsize=20)
 
@@ -529,15 +605,18 @@ def nn(args):
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
+    
     logging.info(f'starting NN assignment for {comb_stats_df.sample_id.nunique()} samples in run {run_id}')
     mosq_hap_df = prep_mosquito_haps(
         hap_df,
         args.hap_read_count_threshold,
-        args.hap_reads_fraction_threshold)
+        args.hap_reads_fraction_threshold
+        )
 
-    ref_hap_df, allele_freqs, true_multi_targets, \
-        colors, version_name = prep_reference_index(\
-        args.reference_version, path_to_refversion=args.path_to_refversion)
+    ref_hap_df, allele_freqs, true_multi_targets, colors, version_name = prep_reference_index(
+        args.reference_version, 
+        path_to_refversion=args.path_to_refversion
+        )
         
     non_error_hap_fn = f'{args.outdir}/non_error_haplotypes.tsv'
     nndict_fn = f'{args.outdir}/nn_dist_to_ref.tsv'
@@ -609,10 +688,11 @@ def nn(args):
             test_samples,
             results_dfs, 
             true_multi_targets, 
-            args.nn_assignment_threshold,
-            args.medium_contamination_read_count_threshold,
-            args.medium_contamination_multi_allelic_threshold,
-            args.high_contamination_multi_allelic_threshold
+            nn_asgn_threshold=args.nn_assignment_threshold,
+            rc_med_threshold=args.medium_contamination_read_count_threshold,
+            ma_med_threshold=args.medium_contamination_multi_allelic_threshold,
+            ma_hi_threshold=args.high_contamination_multi_allelic_threshold,
+            ma_vh_threshold=args.very_high_contamination_multi_allelic_threshold
         )
 
         comb_stats_df['nn_ref'] = args.reference_version
@@ -651,7 +731,9 @@ def nn(args):
                     level, 
                     colors[level], 
                     args.nn_assignment_threshold,
-                    run_id
+                    run_id,
+                    args.plasm_assignment,
+                    args.plasm_colors
                     )
                 fig.savefig(fig_fn, bbox_inches='tight')
 
@@ -694,6 +776,9 @@ def main():
     parser.add_argument('--high_contamination_multi_allelic_threshold',
                         help='Samples with more than this number of multiallelic targets get high contamination risk. Default: 2',
                         default=2, type=int)
+    parser.add_argument('--very_high_contamination_multi_allelic_threshold',
+                        help='Samples with more than this number of multiallelic targets get very high contamination risk. Default: 4',
+                        default=4, type=int)
     parser.add_argument('--nn_assignment_threshold',
                         help='Required fraction for calling assignment. Default: 0.8',
                         default=0.8, type=float)
@@ -704,6 +789,15 @@ def main():
                         help='Length of k-mers to use. Note that NNoVAE has been developed and tested for k=8, '
                         'so accuracy of results cannot be guaranteed with other values of k. Default: k=8',
                         default=8, type=int)
+    parser.add_argument('--plasm_assignment',
+                        help='Path to plasm_assignment.tsv file used for sample label colouring '
+                        'in nn plots. Default: None - colouring not applied',
+                        default=None)
+    parser.add_argument('--plasm_colors',
+                        help='Path to species_colours.csv from plasm reference directory '
+                        'used for sample label colouring in nn plots. '
+                        'Default: None - colouring not applied',
+                        default=None)
     parser.add_argument('--resume',
                         help='Do not re-generate nn_dist_to_ref.tsv and nn_assignment.tsv '
                         'if those are present in the output directory',

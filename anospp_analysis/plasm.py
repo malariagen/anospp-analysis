@@ -2,14 +2,10 @@ import argparse
 import os
 import sys
 import subprocess
-from subprocess import run
 import matplotlib
 matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
-from Bio import AlignIO
-from Bio import Phylo
-import warnings
 
 from anospp_analysis.util import *
 from anospp_analysis.iplot import plot_plate_view
