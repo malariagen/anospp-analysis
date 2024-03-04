@@ -544,17 +544,18 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         
         ax.set_xticks(range(plot_df.shape[0]))
         ax.set_xticklabels(plot_df['sample_name'])
-        for i, r in plot_df.iterrows():
-            sample_plasm_sp = plasm_spp[r.sample_id]
-            # multiple species infection
-            if len(sample_plasm_sp.split(',')) > 1:
-                ax.get_xticklabels()[i].set_color('black')
-            # species in index
-            elif sample_plasm_sp in plasm_colors.keys():
-                ax.get_xticklabels()[i].set_color(plasm_colors[sample_plasm_sp])
-            # no infection
-            else:
-                ax.get_xticklabels()[i].set_color('grey')
+        if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+            for i, r in plot_df.iterrows():
+                sample_plasm_sp = plasm_spp[r.sample_id]
+                # multiple species infection
+                if len(sample_plasm_sp.split(',')) > 1:
+                    ax.get_xticklabels()[i].set_color('black')
+                # species in index
+                elif sample_plasm_sp in plasm_colors.keys():
+                    ax.get_xticklabels()[i].set_color(plasm_colors[sample_plasm_sp])
+                # no infection
+                else:
+                    ax.get_xticklabels()[i].set_color('grey')
         ax.tick_params(axis='x', rotation=90)
         
         ax2 = ax.twiny()
@@ -569,23 +570,24 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     contam_artist = axs[0].legend(
         handles=[mpatches.Patch(color=color, label=label) for label, color in contam_colors.items()],
         title='contamination risk (top text)',
-        bbox_to_anchor=(1,1.1), 
-        fontsize=10, 
+        bbox_to_anchor=(1,1.1),
+        fontsize=10,
         ncols=2
     )
     axs[0].add_artist(contam_artist)
 
-    plasm_artist = axs[0].legend(
-        handles=[mpatches.Patch(color=color, label=label) for label, color in plasm_legend_colors.items()],
-        title='Plasmodium (bottom text)',
-        bbox_to_anchor=(1,0.8), 
-        fontsize=10,
-        ncols=2
-    )
-    axs[0].add_artist(plasm_artist)
+    if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+        plasm_artist = axs[0].legend(
+            handles=[mpatches.Patch(color=color, label=label) for label, color in plasm_legend_colors.items()],
+            title='Plasmodium (bottom text)',
+            bbox_to_anchor=(1,0.8),
+            fontsize=10,
+            ncols=2
+        )
+        axs[0].add_artist(plasm_artist)
 
     # reverse species legend order to match barplot order
-    axs[0].legend(handles[::-1], labels[::-1], loc='upper left', bbox_to_anchor=(1,0.3), fontsize=10)
+    axs[0].legend(handles[::-1], labels[::-1], loc='upper left', bbox_to_anchor=(1,0.2), fontsize=10)
     # adding title in post - handling margins by savefig's bbox_inches='tight' at this point
     axs[0].set_title(f'NN assignment {level_label} level for run {run_id}', fontsize=20)
 
