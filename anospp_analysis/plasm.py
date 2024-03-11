@@ -29,7 +29,8 @@ SUM_HAP_COLS = [
         'species_assignment',
         'hap_seqid',
         'plate_id',
-        'well_id'
+        'well_id',
+        'consensus'
     ]
 
 def run_blast(plasm_hap_df, outdir, blastdb, max_mismatch, min_qcov):
@@ -302,7 +303,7 @@ def plasm(args):
 
     sum_samples_df['plasm_ref'] = args.reference_version
 
-    sum_samples_df.drop(columns=[
+    out_df = sum_samples_df.drop(columns=[
         'sample_name',
         'lims_plate_id',
         'lims_well_id',
@@ -310,7 +311,11 @@ def plasm(args):
         'well_id',
         'P1_reads_total',
         'P2_reads_total'
-    ]).to_csv(f'{args.outdir}/plasm_assignment.tsv', sep='\t')
+    ]).copy()
+
+    out_df.columns = out_df.columns.str.lower()
+
+    out_df.to_csv(f'{args.outdir}/plasm_assignment.tsv', sep='\t')
 
     if args.interactive_plotting:
         for lims_plate in sum_samples_df.lims_plate_id.unique():

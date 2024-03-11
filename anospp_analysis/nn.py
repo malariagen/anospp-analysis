@@ -357,7 +357,7 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets,
 
     #Read in exceptions from true_multi_targets file
     for idx, item in true_multi_targets.iterrows():
-        potentially_affected_samples = comb_stats_df.loc[comb_stats_df[f'res_{item.level}'] == item.sgp, 'sample_id']
+        potentially_affected_samples = comb_stats_df.loc[comb_stats_df[f'nn_{item.level}'] == item.sgp, 'sample_id']
         affected_samples = non_error_hap_df \
             .query('sample_id in @potentially_affected_samples & target == @item.target') \
             .groupby('sample_id') \
@@ -414,7 +414,7 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
             .apply(
                 lambda row: results_dfs[level].columns[row >= nn_asgn_threshold][0],
                 axis=1))
-        comb_stats_df[f'res_{level}'] = comb_stats_df.sample_id.map(asgn_dict)
+        comb_stats_df[f'nn_{level}'] = comb_stats_df.sample_id.map(asgn_dict)
 
     comb_stats_df = estimate_contamination(
         comb_stats_df,
@@ -430,8 +430,8 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
     comb_stats_df['nn_call_method'] = None
     # NN hierarchical assignment by level
     for level in ['fine', 'int', 'coarse']:
-        leveldict = dict(zip(comb_stats_df.sample_id, comb_stats_df[f'res_{level}']))
-        is_id_on_level = (comb_stats_df.nn_species_call.isnull() & ~comb_stats_df[f'res_{level}'].isnull())
+        leveldict = dict(zip(comb_stats_df.sample_id, comb_stats_df[f'nn_{level}']))
+        is_id_on_level = (comb_stats_df.nn_species_call.isnull() & ~comb_stats_df[f'nn_{level}'].isnull())
         comb_stats_df.loc[is_id_on_level, 'nn_call_method'] = f'NN_{level}'
         comb_stats_df.loc[is_id_on_level, 'nn_species_call'] = comb_stats_df.loc[
             comb_stats_df.nn_call_method == f'NN_{level}', 'sample_id'
@@ -462,12 +462,12 @@ def generate_summary(comb_stats_df, version_name):
         f'{(comb_stats_df.contamination_risk == "medium").sum()} samples have medium contamination risk',
         f'{(comb_stats_df.contamination_risk == "low").sum()} samples have low contamination risk',
         f'{(comb_stats_df.nn_assignment=="no").sum()} samples with < 10 targets lack NN assignment',
-        f'{(~comb_stats_df.res_coarse.isnull()).sum()} samples are assigned at coarse level',
-        f'to {comb_stats_df.res_coarse.nunique()} different species groups',
-        f'{(~comb_stats_df.res_int.isnull()).sum()} samples are assigned at intermediate level',
-        f'to {comb_stats_df.res_int.nunique()} different species groups',
-        f'{(~comb_stats_df.res_fine.isnull()).sum()} samples are assigned at fine level',
-        f'to {comb_stats_df.res_fine.nunique()} different species groups',
+        f'{(~comb_stats_df.nn_coarse.isnull()).sum()} samples are assigned at coarse level',
+        f'to {comb_stats_df.nn_coarse.nunique()} different species groups',
+        f'{(~comb_stats_df.nn_int.isnull()).sum()} samples are assigned at intermediate level',
+        f'to {comb_stats_df.nn_int.nunique()} different species groups',
+        f'{(~comb_stats_df.nn_fine.isnull()).sum()} samples are assigned at fine level',
+        f'to {comb_stats_df.nn_fine.nunique()} different species groups',
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_int", "sample_id"].nunique()} '
          'samples with sufficient coverage could not be assigned at intermediate level',
         f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_int") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
@@ -706,9 +706,9 @@ def nn(args):
             'mosq_reads',
             'mosq_targets_recovered',
             'nn_assignment',
-            'res_coarse',
-            'res_int',
-            'res_fine',
+            'nn_coarse',
+            'nn_int',
+            'nn_fine',
             'contamination_risk',
             'nn_species_call',
             'nn_call_method',
