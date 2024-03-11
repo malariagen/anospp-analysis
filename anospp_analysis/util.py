@@ -273,33 +273,33 @@ def prep_stats(stats_fn):
     stats_df.rename(columns={
         # compatibility with legacy format
         's_Sample':'sample_id',
-        'final':'DADA2_postfilter_reads',
+        'final':'dada2_postfilter_reads',
         # compatibility with new format 
         'sample':'sample_id',
         # generic renaming
-        'DADA2_input':'DADA2_input_reads',
-        'filtered':'DADA2_filtered_reads',
-        'denoisedF':'DADA2_denoisedF_reads',
-        'denoisedR':'DADA2_denoisedR_reads',
-        'merged':'DADA2_merged_reads',
-        'nonchim':'DADA2_nonchim_reads'
+        'DADA2_input':'dada2_input_reads',
+        'filtered':'dada2_filtered_reads',
+        'denoisedF':'dada2_denoisedF_reads',
+        'denoisedR':'dada2_denoisedR_reads',
+        'merged':'dada2_merged_reads',
+        'nonchim':'dada2_nonchim_reads'
         },
         inplace=True)
     
     for col in ('sample_id',
-                'DADA2_input_reads',
-                'DADA2_filtered_reads',
-                'DADA2_denoisedF_reads',
-                'DADA2_denoisedR_reads',
-                'DADA2_merged_reads',
-                'DADA2_nonchim_reads'):
+                'dada2_input_reads',
+                'dada2_filtered_reads',
+                'dada2_denoisedF_reads',
+                'dada2_denoisedR_reads',
+                'dada2_merged_reads',
+                'dada2_nonchim_reads'):
         assert col in stats_df.columns, f'stats column {col} not found'
 
     # denoising happens for F and R reads independently, we take minimum of those 
     # as an estimate for retained read count
-    stats_df['DADA2_denoised_reads'] = stats_df[[
-        'DADA2_denoisedF_reads',
-        'DADA2_denoisedR_reads'
+    stats_df['dada2_denoised_reads'] = stats_df[[
+        'dada2_denoisedF_reads',
+        'dada2_denoisedR_reads'
         ]].min(axis=1)
     # legacy stats calculated separately for each target, merging
     if 'target' in stats_df.columns:
@@ -325,8 +325,8 @@ def prep_stats(stats_fn):
             'DADA2_stats.tsv provided instead of overall_summary.txt, '
             'cutadapt readthrough stats will be missing'
             )
-        stats_df['total_reads'] = stats_df['DADA2_input_reads']
-        stats_df['readthrough_pass_reads'] = stats_df['DADA2_input_reads']
+        stats_df['total_reads'] = stats_df['dada2_input_reads']
+        stats_df['readthrough_pass_reads'] = stats_df['dada2_input_reads']
     
     return stats_df
 
@@ -379,9 +379,10 @@ def combine_stats(stats_df, hap_df, samples_df):
     comb_stats_df['raw_mosq_reads'] = comb_stats_df['raw_mosq_reads'].fillna(0).astype(int)
     
     for pt in PLASM_TARGETS:
-        comb_stats_df[f'{pt}_reads'] = hap_df[hap_df.target == pt] \
+        ptl = pt.lower()
+        comb_stats_df[f'{ptl}_reads'] = hap_df[hap_df.target == pt] \
             .groupby('sample_id')['reads'].sum()
-        comb_stats_df[f'{pt}_reads'] = comb_stats_df[f'{pt}_reads'].fillna(0).astype(int)
+        comb_stats_df[f'{ptl}_reads'] = comb_stats_df[f'{ptl}_reads'].fillna(0).astype(int)
     
     comb_stats_df.reset_index(inplace=True)
     comb_stats_df.sort_values(by='tag_index', inplace=True)

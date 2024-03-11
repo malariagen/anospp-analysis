@@ -13,12 +13,12 @@ def validate_aggregation(comb_df):
         'sample_id', 'irods_path', 'id_library_lims', 'id_study_lims',
         'sanger_sample_id', 'run_id', 'lane_index', 'tag_index', 'plate_id',
         'well_id', 'lims_plate_id', 'lims_well_id', 'sample_name',
-        'total_reads', 'readthrough_pass_reads', 'DADA2_input_reads',
-        'DADA2_filtered_reads', 'DADA2_denoised_reads', 'DADA2_merged_reads',
-        'DADA2_nonchim_reads', 'target_reads', 'overall_filter_rate',
+        'total_reads', 'readthrough_pass_reads', 'dada2_input_reads',
+        'dada2_filtered_reads', 'dada2_denoised_reads', 'dada2_merged_reads',
+        'dada2_nonchim_reads', 'target_reads', 'overall_filter_rate',
         'unassigned_asvs', 'targets_recovered', 'raw_mosq_targets_recovered',
-        'raw_multiallelic_mosq_targets', 'raw_mosq_reads', 'P1_reads', 'P2_reads', 
-        'P1_reads_pass', 'P2_reads_pass', 'plasmodium_detection_status', 'plasm_ref',
+        'raw_multiallelic_mosq_targets', 'raw_mosq_reads', 'p1_reads', 'p2_reads', 
+        'p1_reads_pass', 'p2_reads_pass', 'plasmodium_detection_status', 'plasm_ref',
         # skip plasm hap
         'multiallelic_mosq_targets', 'mosq_reads', 'mosq_targets_recovered',
         'nn_assignment', 'contamination_risk', 'nn_species_call', 'nn_call_method', 'nn_ref',
@@ -29,12 +29,12 @@ def validate_aggregation(comb_df):
 
     for col in [
         'run_id', 'lane_index', 'tag_index',
-        'total_reads', 'readthrough_pass_reads', 'DADA2_input_reads',
-        'DADA2_filtered_reads', 'DADA2_denoised_reads', 'DADA2_merged_reads',
-        'DADA2_nonchim_reads', 'target_reads',
+        'total_reads', 'readthrough_pass_reads', 'dada2_input_reads',
+        'dada2_filtered_reads', 'dada2_denoised_reads', 'dada2_merged_reads',
+        'dada2_nonchim_reads', 'target_reads',
         'unassigned_asvs', 'targets_recovered', 'raw_mosq_targets_recovered',
-        'raw_multiallelic_mosq_targets', 'raw_mosq_reads', 'P1_reads', 'P2_reads', 
-        'P1_reads_pass', 'P2_reads_pass',
+        'raw_multiallelic_mosq_targets', 'raw_mosq_reads', 'p1_reads', 'p2_reads', 
+        'p1_reads_pass', 'p2_reads_pass',
         'multiallelic_mosq_targets', 'mosq_reads', 'mosq_targets_recovered'
         ]:
         assert pd.api.types.is_integer_dtype(comb_df[col]), f'{col} datatype is not integer'
@@ -58,14 +58,14 @@ def validate_aggregation(comb_df):
 
     for (colp, coln) in [
         ('total_reads','readthrough_pass_reads'),
-        ('readthrough_pass_reads','DADA2_input_reads'),
-        ('DADA2_input_reads','DADA2_filtered_reads'),
-        ('DADA2_filtered_reads','DADA2_denoised_reads'),
-        ('DADA2_denoised_reads','DADA2_merged_reads'),
-        ('DADA2_merged_reads','DADA2_nonchim_reads'),
-        ('DADA2_nonchim_reads','target_reads'),
-        ('P1_reads', 'P1_reads_pass'),
-        ('P2_reads', 'P2_reads_pass'),
+        ('readthrough_pass_reads','dada2_input_reads'),
+        ('dada2_input_reads','dada2_filtered_reads'),
+        ('dada2_filtered_reads','dada2_denoised_reads'),
+        ('dada2_denoised_reads','dada2_merged_reads'),
+        ('dada2_merged_reads','dada2_nonchim_reads'),
+        ('dada2_nonchim_reads','target_reads'),
+        ('p1_reads', 'p1_reads_pass'),
+        ('p2_reads', 'p2_reads_pass'),
         ('raw_mosq_reads','mosq_reads'), # issue
         ('raw_mosq_targets_recovered','mosq_targets_recovered'), # issue
         ('raw_multiallelic_mosq_targets','multiallelic_mosq_targets')
@@ -83,22 +83,22 @@ def validate_aggregation(comb_df):
         ]:
         assert (comb_df[col] <= 62).all(), f'over 62 {col} reported'
 
-    assert (comb_df.target_reads == comb_df.raw_mosq_reads + comb_df.P1_reads + comb_df.P2_reads).all(), \
-        'target_reads does not match raw_mosq_reads + P1_reads + P2_reads'
+    assert (comb_df.target_reads == comb_df.raw_mosq_reads + comb_df.p1_reads + comb_df.p2_reads).all(), \
+        'target_reads does not match raw_mosq_reads + p1_reads + p2_reads'
 
-    assert (comb_df.query('P1_reads_pass > 10')['P1_hapids_pass'].notna()).all(), \
-        'not all P1 pass records supported by 10 reads have P1_hapids_pass recorded'
-    assert ~((comb_df.P1_reads_pass < 10) & (comb_df.P1_reads_pass > 0)).any(), \
+    assert (comb_df.query('p1_reads_pass > 10')['p1_hapids_pass'].notna()).all(), \
+        'not all P1 pass records supported by 10 reads have p1_hapids_pass recorded'
+    assert ~((comb_df.p1_reads_pass < 10) & (comb_df.p1_reads_pass > 0)).any(), \
         'some P1 pass records supported by less than 10 reads'
-    assert (comb_df.query('P1_reads_pass == 0')['P1_hapids_pass'].isna()).all(), \
-        'record with zero P1_reads_pass has some P1_hapids_pass recorded'
+    assert (comb_df.query('p1_reads_pass == 0')['p1_hapids_pass'].isna()).all(), \
+        'record with zero p1_reads_pass has some p1_hapids_pass recorded'
 
-    assert (comb_df.query('P2_reads_pass > 10')['P2_hapids_pass'].notna()).all(), \
-        'not all P2 pass records supported by 10 reads have P2_hapids_pass recorded'
-    assert ~((comb_df.P2_reads_pass < 10) & (comb_df.P2_reads_pass > 0)).any(), \
+    assert (comb_df.query('p2_reads_pass > 10')['p2_hapids_pass'].notna()).all(), \
+        'not all P2 pass records supported by 10 reads have p2_hapids_pass recorded'
+    assert ~((comb_df.p2_reads_pass < 10) & (comb_df.p2_reads_pass > 0)).any(), \
         'some P2 pass records supported by less than 10 reads'
-    assert (comb_df.query('P2_reads_pass == 0')['P2_hapids_pass'].isna()).all(), \
-        'record with zero P2_reads_pass has some P2_hapids_pass recorded'
+    assert (comb_df.query('p2_reads_pass == 0')['p2_hapids_pass'].isna()).all(), \
+        'record with zero p2_reads_pass has some p2_hapids_pass recorded'
 
 def agg(args):
 
@@ -130,7 +130,7 @@ def agg(args):
         'VAE samples do not match NN, plasm, QC & lanelets'
     comb_df = pd.merge(comb_df, vae_df, how='left')
 
-    comb_df['nnovae_mosquito_species'] = comb_df.vae_species.fillna(comb_df.nn_species_call)
+    comb_df['nnovae_mosquito_species'] = comb_df.vae_species_call.fillna(comb_df.nn_species_call)
     is_nocall = comb_df['nnovae_mosquito_species'].isna()
     assert ~is_nocall.any(), \
         f'could not find none of NN or VAE call for {comb_df[is_nocall].index.to_list()}'

@@ -82,7 +82,7 @@ def select_samples(nn_stats_df, nn_hap_df, level, sgp, n_targets):
 
     #identify samples meeting selection criteria
     vae_samples = nn_stats_df.loc[
-        (nn_stats_df[f'res_{level}'].isin(sgps)) & (nn_stats_df['mosq_targets_recovered'] >= n_targets), 
+        (nn_stats_df[f'nn_{level}'].isin(sgps)) & (nn_stats_df['mosq_targets_recovered'] >= n_targets), 
         'sample_id'
         ]
     #subset haplotype df

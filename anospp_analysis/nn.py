@@ -479,7 +479,7 @@ def generate_summary(comb_stats_df, version_name):
     ]
     return '\n'.join(summary)
 
-def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id, plasm_assignment_fn, plasm_colors_fn):
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id, plasm_assignment_fn, plasm_colors_fn, read_count_threshold):
     
     logging.info(f'generating {level_label} level plots')
     #Generate bar plots at given assignment level
@@ -563,6 +563,8 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         ax2.set_xticklabels(plot_df['mosq_targets_recovered'])
         for i, r in plot_df.iterrows():
             ax2.get_xticklabels()[i].set_color(contam_colors[r.contamination_risk])
+            if r.mosq_reads < read_count_threshold:
+                ax2.get_xticklabels()[i].set_fontstyle('bold')
         ax2.tick_params(axis='x', rotation=90)
         ax2.set_xlim(ax.get_xlim())
     plt.tight_layout()
@@ -735,7 +737,8 @@ def nn(args):
                     args.nn_assignment_threshold,
                     run_id,
                     args.plasm_assignment,
-                    args.plasm_colors
+                    args.plasm_colors,
+                    args.medium_contamination_read_count_threshold
                     )
                 fig.savefig(fig_fn, bbox_inches='tight')
 
