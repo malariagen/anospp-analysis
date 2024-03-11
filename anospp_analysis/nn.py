@@ -500,9 +500,9 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     # contamination color scheme - applied to top ticks 
     contam_colors = {
         'low':'#808080',
-        'medium':'#e377c2',
-        'high':'#d62728',
-        'very_high':'#000000'
+        'medium':'#FF9900',
+        'high':'#cc00FF',
+        'very_high':'#FF0000'
     }
 
     # plasm color scheme - applied to bottom ticks

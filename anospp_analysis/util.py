@@ -239,8 +239,10 @@ def prep_samples(samples_fn):
                 )
     else:
         logging.info('inferring lims_plate_id from tags')
-        samples_df['lims_plate_id'] = samples_df.apply(lambda r: f'lp_{r.run_id}_{(r.tag_index - 1) // 384 + 1}',
-            axis=1)
+        samples_df['lims_plate_id'] = samples_df.apply(
+            lambda r: f'lp_{r.run_id}_{(r.tag_index - 1) // 384 + 1}',
+            axis=1
+            )
         samples_df['lims_well_id'] = (samples_df.tag_index % 384).replace(lims_well_id_mapper())
     assert ~samples_df.lims_plate_id.isna().any(), 'Could not infer plate_id for all samples'
     assert ~samples_df.lims_well_id.isna().any(), 'Could not infer well_id for all samples'
