@@ -74,9 +74,15 @@ def select_samples(nn_stats_df, nn_hap_df, level, sgp, n_targets):
     Select the samples meeting the criteria for VAE assignment
     Based on NN assignment and number of targets
     '''
+    # nn ref labels changed between nnv1 (Anopheles_gambiae_complex) 
+    # and nnv2 (Gambiae_complex)
+    # here, match both versions at once
+    # TODO make the change explicit
+    sgps = [sgp, '_'.join(sgp.split('_')[1:]).capitalize()]
+
     #identify samples meeting selection criteria
     vae_samples = nn_stats_df.loc[
-        (nn_stats_df[f'res_{level}'] == sgp) & (nn_stats_df['mosq_targets_recovered'] >= n_targets), 
+        (nn_stats_df[f'res_{level}'].isin(sgps)) & (nn_stats_df['mosq_targets_recovered'] >= n_targets), 
         'sample_id'
         ]
     #subset haplotype df
