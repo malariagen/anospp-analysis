@@ -320,7 +320,8 @@ def plot_plasm_balance(comb_stats_df, run_id):
     fig, ax = plt.subplots(1, 1, figsize=(5, 5), constrained_layout=True)
     fig.suptitle(f'P1/P2 coverage balance for run {run_id}')
     sns.scatterplot(
-        data=comb_stats_df,
+        # display P1 or P2-only samples
+        data=comb_stats_df.replace(0, 0.5),
         x='P1_reads',
         y='P2_reads',
         hue='plate_id',
@@ -337,8 +338,8 @@ def plot_plasm_balance(comb_stats_df, run_id):
     ax.axhline(10000, c='red', alpha=.5, linestyle='dashed')
     ax.axvline(10000, c='red', alpha=.5, linestyle='dashed')
     ax.plot(
-        [0.9, max_plasm_reads],
-        [0.9, max_plasm_reads],
+        [0.4, max_plasm_reads],
+        [0.4, max_plasm_reads],
         color='silver',
         linestyle='dashed',
         alpha=.5
