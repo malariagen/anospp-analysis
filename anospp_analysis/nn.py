@@ -564,7 +564,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         for i, r in plot_df.iterrows():
             ax2.get_xticklabels()[i].set_color(contam_colors[r.contamination_risk])
             if r.mosq_reads < read_count_threshold:
-                ax2.get_xticklabels()[i].set_fontstyle('bold')
+                ax2.get_xticklabels()[i].set_fontstyle('oblique')
         ax2.tick_params(axis='x', rotation=90)
         ax2.set_xlim(ax.get_xlim())
     plt.tight_layout()
