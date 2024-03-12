@@ -15,11 +15,11 @@ def write_qc_stats(comb_stats_df, out_fn):
         'sample_id',
         'total_reads',
         'readthrough_pass_reads',
-        'DADA2_input_reads',
-        'DADA2_filtered_reads',
-        'DADA2_denoised_reads',
-        'DADA2_merged_reads',
-        'DADA2_nonchim_reads',
+        'dada2_input_reads',
+        'dada2_filtered_reads',
+        'dada2_denoised_reads',
+        'dada2_merged_reads',
+        'dada2_nonchim_reads',
         'target_reads',
         'overall_filter_rate',
         'unassigned_asvs',
@@ -27,8 +27,8 @@ def write_qc_stats(comb_stats_df, out_fn):
         'raw_mosq_targets_recovered',
         'raw_multiallelic_mosq_targets',
         'raw_mosq_reads',
-        'P1_reads',
-        'P2_reads'
+        'p1_reads',
+        'p2_reads'
     ]].to_csv(out_fn, sep='\t', index=False)
 
 def plot_target_balance(hap_df, run_id):
@@ -135,13 +135,13 @@ def plot_sample_filtering(comb_stats_df, run_id, anospp=True):
     # comb_stats_df colname : legend label
     dada2_cols = OrderedDict([
         ('total_reads','removed as readthrough'),
-        ('DADA2_input_reads','removed by filterAndTrim'), 
-        ('DADA2_filtered_reads','removed by denoising'),
-        ('DADA2_denoised_reads','removed by merging'), 
-        ('DADA2_merged_reads','removde by rmchimera'), 
-        ('DADA2_nonchim_reads','unassigned to amplicons'),
+        ('dada2_input_reads','removed by filterAndTrim'), 
+        ('dada2_filtered_reads','removed by denoising'),
+        ('dada2_denoised_reads','removed by merging'), 
+        ('dada2_merged_reads','removde by rmchimera'), 
+        ('dada2_nonchim_reads','unassigned to amplicons'),
         # legacy post-filter disabled in prod
-        # ('DADA2_final_reads','unassigned to amplicons'),
+        # ('dada2_final_reads','unassigned to amplicons'),
         ])
 
     if anospp:
@@ -312,8 +312,8 @@ def plot_plasm_balance(comb_stats_df, run_id):
 
     max_plasm_reads = max(
         max(
-            comb_stats_df.P1_reads.max(), 
-            comb_stats_df.P2_reads.max()
+            comb_stats_df.p1_reads.max(), 
+            comb_stats_df.p2_reads.max()
             ),
         1)
 
@@ -322,8 +322,8 @@ def plot_plasm_balance(comb_stats_df, run_id):
     sns.scatterplot(
         # display P1 or P2-only samples
         data=comb_stats_df.replace(0, 0.5),
-        x='P1_reads',
-        y='P2_reads',
+        x='p1_reads',
+        y='p2_reads',
         hue='plate_id',
         alpha=.5, 
         ax=ax
@@ -455,8 +455,8 @@ def qc(args):
 
     if anospp:
         heatmap_cols = [
-            'P1_reads',
-            'P2_reads',
+            'p1_reads',
+            'p2_reads',
             'total_reads', 
             'target_reads',
             'overall_filter_rate',
