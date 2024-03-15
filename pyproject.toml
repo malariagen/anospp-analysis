@@ -19,6 +19,7 @@ tensorflow = "^2.12"
 bokeh = "*"
 
 [tool.poetry.group.dev.dependencies]
+jupyter = "*"
 
 [tool.poetry.scripts]
 anospp-prep = "anospp_analysis.prep:main"
