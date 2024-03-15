@@ -279,8 +279,9 @@ def prep_stats(stats_fn):
         # generic renaming
         'DADA2_input':'dada2_input_reads',
         'filtered':'dada2_filtered_reads',
-        'denoisedF':'dada2_denoisedF_reads',
-        'denoisedR':'dada2_denoisedR_reads',
+        'denoised':'dada2_denoised_reads',
+        'denoisedF':'dada2_denoisedf_reads',
+        'denoisedR':'dada2_denoisedr_reads',
         'merged':'dada2_merged_reads',
         'nonchim':'dada2_nonchim_reads'
         },
@@ -289,18 +290,23 @@ def prep_stats(stats_fn):
     for col in ('sample_id',
                 'dada2_input_reads',
                 'dada2_filtered_reads',
-                'dada2_denoisedF_reads',
-                'dada2_denoisedR_reads',
-                'dada2_merged_reads',
                 'dada2_nonchim_reads'):
         assert col in stats_df.columns, f'stats column {col} not found'
 
     # denoising happens for F and R reads independently, we take minimum of those 
-    # as an estimate for retained read count
-    stats_df['dada2_denoised_reads'] = stats_df[[
-        'dada2_denoisedF_reads',
-        'dada2_denoisedR_reads'
-        ]].min(axis=1)
+    # as an estimate for denoised read count
+    if 'dada2_denoisedf_reads' in stats_df.columns and 'dada2_denoisedr_reads' in stats_df.columns:
+        logging.info('found DADA2 stats for paired end reads')
+        stats_df['dada2_denoised_reads'] = stats_df[[
+            'dada2_denoisedf_reads',
+            'dada2_denoisedr_reads'
+            ]].min(axis=1)
+        assert 'dada2_merged_reads' in stats_df.columns, f'stats column dada2_merged_reads not found'
+    else:
+        logging.info('found DADA2 stats for single end reads')
+        assert 'dada2_denoised_reads' in stats_df.columns, f'stats column dada2_denoised_reads not found'
+        # fake merged - same as denoised
+        stats_df['dada2_merged_reads'] = stats_df['dada2_denoised_reads']
     # legacy stats calculated separately for each target, merging
     if 'target' in stats_df.columns:
         logging.info(f'summarising legacy DADA2 statistics across targets')
