@@ -528,6 +528,8 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     plates = comb_stats_df.plate_id.unique()
     nplates = comb_stats_df.plate_id.nunique()
     fig, axs = plt.subplots(nplates, 1, figsize=(20, 4 * nplates))
+    if nplates == 1:
+        axs = [axs]
     for plate, ax in zip(plates, axs):
         plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().reset_index()
         plot_df['well_id'] = well_ordering(plot_df['well_id'])

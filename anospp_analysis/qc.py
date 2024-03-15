@@ -154,6 +154,8 @@ def plot_sample_filtering(comb_stats_df, run_id, anospp=True):
     nplates = len(plates)
     fig, axs = plt.subplots(nplates, 1, figsize=(20, 4 * nplates), constrained_layout=True)
     fig.suptitle(f'Read filtering stats for run {run_id}', fontsize=20)
+    if nplates == 1:
+        axs = [axs]
     for plate, ax in zip(plates, axs):
         plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy()
         plot_df['well_id'] = well_ordering(plot_df['well_id'])
