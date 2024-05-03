@@ -84,6 +84,23 @@ def plot_allele_balance(hap_df, run_id):
     
     return het_plot
 
+def plot_well_balance(comb_stats_df, run_id):
+
+    logging.info('plotting wells balance')
+
+    fig, ax = plt.subplots(figsize=(14, 4))
+    fig.suptitle(f'Reads per well for run {run_id}')
+    sns.boxplot(
+            data=comb_stats_df,
+            x = 'well_id',
+            y = 'total_reads',
+            ax = ax
+            )
+    ax.set_yscale('log')
+    ax.tick_params(axis='x', rotation=90)
+
+    return fig, ax
+
 def plot_sample_target_heatmap(hap_df, samples_df, col, run_id):
 
     logging.info(f'plotting sample-target heatmap for {col}')
@@ -429,6 +446,9 @@ def qc(args):
 
     fig = plot_allele_balance(hap_df, run_id)
     fig.savefig(f'{args.outdir}/allele_balance.png')
+
+    fig, _ = plot_well_balance(comb_stats_df, run_id)
+    fig.savefig(f'{args.outdir}/well_balance.png')
 
     # # deactivated as unused and too big plot
     # for col in ('nalleles', 'total_reads'):
