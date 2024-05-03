@@ -359,10 +359,10 @@ def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets,
     for idx, item in true_multi_targets.iterrows():
         potentially_affected_samples = comb_stats_df.loc[comb_stats_df[f'nn_{item.level}'] == item.sgp, 'sample_id']
         affected_samples = non_error_hap_df \
-            .query('sample_id in @potentially_affected_samples & target == @item.target') \
+            .query('(sample_id in @potentially_affected_samples) & (target == @item.target)') \
             .groupby('sample_id') \
             .filter(
-                lambda x: (x['seqid'].nunique() > 2) & (x['seqid'].nunique() < item.admissable_alleles)
+                lambda x: (x['seqid'].nunique() > 2) & (x['seqid'].nunique() <= item.admissable_alleles)
                 ) \
             ['sample_id'].unique()
         comb_stats_df.loc[comb_stats_df.sample_id.isin(affected_samples), 'multiallelic_mosq_targets'] -= 1
@@ -507,6 +507,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
 
     # plasm color scheme - applied to bottom ticks
     if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+        logging.info(f'using plasm predictions to colour sample labels')
         plasm_df = pd.read_csv(plasm_assignment_fn, sep='\t')
         plasm_df['plasmodium_species'] = plasm_df['plasmodium_species'].fillna('')
         plasm_spp = plasm_df.set_index('sample_id')['plasmodium_species'].to_dict()
