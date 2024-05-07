@@ -64,27 +64,27 @@ def prep_reference_index(reference_version, path_to_refversion):
         
     return (selection_criteria_file, vae_weights_file, convex_hulls_df, colorsdict, ref_coord, version_name)
 
-def read_selection_criteria(selection_criteria_file, nn_stats_df, nn_hap_df):
+# def read_selection_criteria(selection_criteria_file, nn_stats_df, nn_hap_df):
     
-    level, sgp, n_targets = open(selection_criteria_file).read().split('\t')
-    return select_samples(nn_stats_df, nn_hap_df, level, sgp, int(n_targets))
+#     level, sgp, n_targets = open(selection_criteria_file).read().split('\t')
+#     return select_samples(nn_stats_df, nn_hap_df, level, sgp, int(n_targets))
 
-def select_samples(nn_stats_df, nn_hap_df, level, sgp, n_targets):
+def select_samples(selection_criteria_file, nn_stats_df, nn_hap_df):
     '''
     Select the samples meeting the criteria for VAE assignment
     Based on NN assignment and number of targets
     '''
-    # nn ref labels changed between nnv1 (Anopheles_gambiae_complex) 
-    # and nnv2 (Gambiae_complex)
-    # here, match both versions at once
-    # TODO make the change explicit
-    sgps = [sgp, '_'.join(sgp.split('_')[1:]).capitalize()]
-
     #identify samples meeting selection criteria
-    vae_samples = nn_stats_df.loc[
-        (nn_stats_df[f'nn_{level}'].isin(sgps)) & (nn_stats_df['mosq_targets_recovered'] >= n_targets), 
-        'sample_id'
-        ]
+    selection_criteria = pd.read_csv(selection_criteria_file, sep='\t')
+    vae_samples = []
+    for _, r in selection_criteria.iterrows():
+        crit_vae_samples = nn_stats_df.loc[
+            (nn_stats_df[f'nn_{r.level}'] == r.sgp) & (nn_stats_df['mosq_targets_recovered'] >= r.n_targets), 
+            'sample_id'
+            ]
+        vae_samples.append(crit_vae_samples)
+    vae_samples = pd.concat(vae_samples)
+    
     #subset haplotype df
     vae_hap_df = nn_hap_df.query('sample_id in @vae_samples')
     
@@ -670,7 +670,7 @@ def vae(args):
 
     selection_criteria_file, vae_weights_file, convex_hulls_df, colordict, ref_coordinates, \
         version_name = prep_reference_index(args.reference_version, args.path_to_refversion)
-    vae_samples, vae_hap_df = read_selection_criteria(
+    vae_samples, vae_hap_df = select_samples(
         selection_criteria_file,
         nn_stats_df,
         nn_hap_df
