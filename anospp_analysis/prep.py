@@ -77,7 +77,7 @@ def get_hap_df(dada_table, demult_dir):
         'lost some sequences in combining deplexing and original DADA2 data'
     
     hap_df = pd.melt(dada_deplex_df.reset_index(), 
-            id_vars=['dada2_id','sequence','target','trimmed_sequence'],
+            id_vars=['dada2_id', 'sequence', 'target', 'trimmed_sequence'],
             var_name='sample_id',
             value_name='reads')
     hap_df['target'] = hap_df.target.astype(str)
@@ -88,7 +88,7 @@ def get_hap_df(dada_table, demult_dir):
         'trimmed_sequence':'consensus'
     }, inplace=True)
     # collapse identical sequences
-    hap_df = hap_df.groupby(['sample_id','target','consensus'])['reads'].sum().reset_index()
+    hap_df = hap_df.groupby(['sample_id', 'target', 'consensus'])['reads'].sum().reset_index()
     # remove unsupported sequences
     hap_df = hap_df.query('reads > 0').copy()
 

@@ -57,18 +57,18 @@ def validate_aggregation(comb_df):
     assert comb_df.lims_well_id.isin(lims_well_id_mapper().values()).all(), 'non A1...P24 lims_well_id found'
 
     for (colp, coln) in [
-        ('total_reads','readthrough_pass_reads'),
-        ('readthrough_pass_reads','dada2_input_reads'),
-        ('dada2_input_reads','dada2_filtered_reads'),
-        ('dada2_filtered_reads','dada2_denoised_reads'),
-        ('dada2_denoised_reads','dada2_merged_reads'),
-        ('dada2_merged_reads','dada2_nonchim_reads'),
-        ('dada2_nonchim_reads','target_reads'),
+        ('total_reads', 'readthrough_pass_reads'),
+        ('readthrough_pass_reads', 'dada2_input_reads'),
+        ('dada2_input_reads', 'dada2_filtered_reads'),
+        ('dada2_filtered_reads', 'dada2_denoised_reads'),
+        ('dada2_denoised_reads', 'dada2_merged_reads'),
+        ('dada2_merged_reads', 'dada2_nonchim_reads'),
+        ('dada2_nonchim_reads', 'target_reads'),
         ('p1_reads', 'p1_reads_pass'),
         ('p2_reads', 'p2_reads_pass'),
-        ('raw_mosq_reads','mosq_reads'), # issue
-        ('raw_mosq_targets_recovered','mosq_targets_recovered'), # issue
-        ('raw_multiallelic_mosq_targets','multiallelic_mosq_targets')
+        ('raw_mosq_reads', 'mosq_reads'), # issue
+        ('raw_mosq_targets_recovered', 'mosq_targets_recovered'), # issue
+        ('raw_multiallelic_mosq_targets', 'multiallelic_mosq_targets')
         ]:
         assert (comb_df[colp] >= comb_df[coln]).all(), f'found less reads in {colp} than in {coln}'
 
@@ -78,8 +78,8 @@ def validate_aggregation(comb_df):
     assert (comb_df.targets_recovered <= 64).all(), 'over 64 targets_recovered reported'
 
     for col in [
-        'raw_mosq_targets_recovered','raw_multiallelic_mosq_targets',
-        'multiallelic_mosq_targets','mosq_targets_recovered'
+        'raw_mosq_targets_recovered', 'raw_multiallelic_mosq_targets',
+        'multiallelic_mosq_targets', 'mosq_targets_recovered'
         ]:
         assert (comb_df[col] <= 62).all(), f'over 62 {col} reported'
 

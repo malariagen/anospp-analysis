@@ -36,7 +36,7 @@ def plot_target_balance(hap_df, run_id):
     logging.info('plotting targets balance')
 
     reads_per_sample_target = hap_df \
-        .groupby(['sample_id','target'], observed=False)['reads'].sum().reset_index()
+        .groupby(['sample_id', 'target'], observed=False)['reads'].sum().reset_index()
     
     figsize = (hap_df['target'].nunique() * 0.3, 6)
     fig, ax = plt.subplots(1, 1, figsize=figsize, constrained_layout=True)
@@ -105,7 +105,7 @@ def plot_sample_target_heatmap(hap_df, samples_df, col, run_id):
 
     logging.info(f'plotting sample-target heatmap for {col}')
 
-    if col not in ('total_reads','nalleles'):
+    if col not in ('total_reads', 'nalleles'):
         raise ValueError(f'sample target heatmap for {col} not implemented')
 
     st_df = hap_df.pivot_table(
@@ -151,14 +151,14 @@ def plot_sample_filtering(comb_stats_df, run_id, anospp=True):
 
     # comb_stats_df colname : legend label
     dada2_cols = OrderedDict([
-        ('total_reads','removed as readthrough'),
-        ('dada2_input_reads','removed by filterAndTrim'), 
-        ('dada2_filtered_reads','removed by denoising'),
-        ('dada2_denoised_reads','removed by merging'), 
-        ('dada2_merged_reads','removde by rmchimera'), 
-        ('dada2_nonchim_reads','unassigned to amplicons'),
+        ('total_reads', 'removed as readthrough'),
+        ('dada2_input_reads', 'removed by filterAndTrim'), 
+        ('dada2_filtered_reads', 'removed by denoising'),
+        ('dada2_denoised_reads', 'removed by merging'), 
+        ('dada2_merged_reads', 'removde by rmchimera'), 
+        ('dada2_nonchim_reads', 'unassigned to amplicons'),
         # legacy post-filter disabled in prod
-        # ('dada2_final_reads','unassigned to amplicons'),
+        # ('dada2_final_reads', 'unassigned to amplicons'),
         ])
 
     if anospp:
@@ -279,7 +279,7 @@ def plot_plate_summaries(comb_stats_df, run_id, lims_plate=False):
     nplates = comb_stats_df[plate_col].nunique()
 
     sum_df = comb_stats_df.groupby(plate_col) \
-        [['over 1000 mosquito reads', 'over 10 targets','over 50% reads retained']].sum()
+        [['over 1000 mosquito reads', 'over 10 targets', 'over 50% reads retained']].sum()
     y = comb_stats_df.groupby(plate_col)['over 1000 mosquito reads'].count()
     sum_df = sum_df.divide(y, axis=0).reindex(plates)
 

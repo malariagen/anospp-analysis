@@ -551,7 +551,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
             for i, r in plot_df.iterrows():
                 sample_plasm_sp = plasm_spp[r.sample_id]
                 # multiple species infection
-                if len(sample_plasm_sp.split(',')) > 1:
+                if len(sample_plasm_sp.split(';')) > 1:
                     ax.get_xticklabels()[i].set_color('black')
                 # species in index
                 elif sample_plasm_sp in plasm_colors.keys():
@@ -767,7 +767,7 @@ def main():
     parser.add_argument('--allelism_normalisation',
                         help='Normalisation method over multiple alleles. Options: [n_alleles,reads_fraction]. '
                         'Default: n_alleles',
-                        choices=['n_alleles','reads_fraction'],
+                        choices=['n_alleles', 'reads_fraction'],
                         default='n_alleles')
     parser.add_argument('--hap_read_count_threshold',
                         help='Minimum number of reads for supported haplotypes.  Default: 10',

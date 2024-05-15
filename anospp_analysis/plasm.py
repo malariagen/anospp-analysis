@@ -37,7 +37,7 @@ def run_blast(plasm_hap_df, outdir, blastdb, max_mismatch, min_qcov):
 
     logging.info('running blast')
 
-    seq_df = plasm_hap_df[['seqid','consensus']].drop_duplicates()
+    seq_df = plasm_hap_df[['seqid', 'consensus']].drop_duplicates()
 
     with open(f"{outdir}/plasm_haps.fasta", "w") as output:
         for _, row in seq_df.iterrows():
@@ -90,7 +90,7 @@ def run_blast(plasm_hap_df, outdir, blastdb, max_mismatch, min_qcov):
         
         # use per-per run seqids P1-0 -> X1-0 etc
         # seqids won't be sequential 
-        hap_id_x = blast_row.qseqid.replace('P','X')
+        hap_id_x = blast_row.qseqid.replace('P', 'X')
 
         return hap_id_x
         
@@ -187,12 +187,12 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
             ].sort_values('reads', ascending=False).groupby('sample_id')
         sum_samples_df[f'{t}_reads_pass'] = t_pass_hap_gbs['reads'].sum()
         sum_samples_df[f'{t}_reads_pass'] = sum_samples_df[f'{t}_reads_pass'].astype(float).fillna(0).astype(int)
-        sum_samples_df[f'{t}_hapids_pass'] = t_pass_hap_gbs.agg({'hap_seqid': ','.join})
+        sum_samples_df[f'{t}_hapids_pass'] = t_pass_hap_gbs.agg({'hap_seqid': ';'.join})
         sum_samples_df[f'{t}_hapids_pass'] = sum_samples_df[f'{t}_hapids_pass'].fillna('')
-        sum_samples_df[f'{t}_hapids_pass_reads'] = t_pass_hap_gbs.agg({'reads_str': ','.join})
+        sum_samples_df[f'{t}_hapids_pass_reads'] = t_pass_hap_gbs.agg({'reads_str': ';'.join})
         sum_samples_df[f'{t}_hapids_pass_reads'] = sum_samples_df[f'{t}_hapids_pass_reads'].fillna('')
         sum_samples_df[f'{t}_species_assignments_pass'] = t_pass_hap_gbs.agg(
-            {'species_assignment': ','.join}
+            {'species_assignment': ';'.join}
             )
         sum_samples_df[f'{t}_species_assignments_pass'] = sum_samples_df[f'{t}_species_assignments_pass'].fillna('')
         # contaminated haplotypes with read count over filter value
@@ -201,23 +201,23 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
             (t_hap_df.contamination_status == 'affected') &
             (t_hap_df.contamination_confidence == 'high')
             ].sort_values('reads', ascending=False).groupby('sample_id')
-        sum_samples_df[f'{t}_hapids_contam'] = t_contam_hap_gbs.agg({'hap_seqid': ','.join})
+        sum_samples_df[f'{t}_hapids_contam'] = t_contam_hap_gbs.agg({'hap_seqid': ';'.join})
         sum_samples_df[f'{t}_hapids_contam'] = sum_samples_df[f'{t}_hapids_contam'].fillna('')
-        sum_samples_df[f'{t}_hapids_contam_reads'] = t_contam_hap_gbs.agg({'reads_str': ','.join})
+        sum_samples_df[f'{t}_hapids_contam_reads'] = t_contam_hap_gbs.agg({'reads_str': ';'.join})
         sum_samples_df[f'{t}_hapids_contam_reads'] = sum_samples_df[f'{t}_hapids_contam_reads'].fillna('')
         # low coverage haplotypes
         t_locov_hap_gbs = t_hap_df[
             (t_hap_df.reads < filters[i])
             ].sort_values('reads', ascending=False).groupby('sample_id')
-        sum_samples_df[f'{t}_hapids_locov'] = t_locov_hap_gbs.agg({'hap_seqid': ','.join})
+        sum_samples_df[f'{t}_hapids_locov'] = t_locov_hap_gbs.agg({'hap_seqid': ';'.join})
         sum_samples_df[f'{t}_hapids_locov'] = sum_samples_df[f'{t}_hapids_locov'].fillna('')
-        sum_samples_df[f'{t}_hapids_locov_reads'] = t_locov_hap_gbs.agg({'reads_str': ','.join})
+        sum_samples_df[f'{t}_hapids_locov_reads'] = t_locov_hap_gbs.agg({'reads_str': ';'.join})
         sum_samples_df[f'{t}_hapids_locov_reads'] = sum_samples_df[f'{t}_hapids_locov_reads'].fillna('')
 
     def infer_status(sum_samples_row, targets=PLASM_TARGETS):
         # not generalised
-        p1_spp = set(sum_samples_row['P1_species_assignments_pass'].split(',')) - set([''])
-        p2_spp = set(sum_samples_row['P2_species_assignments_pass'].split(',')) - set([''])
+        p1_spp = set(sum_samples_row['P1_species_assignments_pass'].split(';')) - set([''])
+        p2_spp = set(sum_samples_row['P2_species_assignments_pass'].split(';')) - set([''])
         is_contam = (
             (len(sum_samples_row['P1_hapids_contam']) > 0) |
             (len(sum_samples_row['P2_hapids_contam']) > 0)
@@ -249,10 +249,10 @@ def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
 
         spp = set()
         for t in targets:
-            tsp = set(sum_samples_row[f'{t}_species_assignments_pass'].split(',')) - set([''])
+            tsp = set(sum_samples_row[f'{t}_species_assignments_pass'].split(';')) - set([''])
             spp = spp.union(tsp)
 
-        return ','.join(spp)
+        return ';'.join(spp)
 
     sum_samples_df['plasmodium_species'] = sum_samples_df.apply(consensus_species, axis=1)
 

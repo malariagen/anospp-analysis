@@ -3,7 +3,7 @@ import numpy as np
 import logging
 
 MOSQ_TARGETS = [str(i) for i in range(62)]
-PLASM_TARGETS = ['P1','P2']
+PLASM_TARGETS = ['P1', 'P2']
 ANOSPP_TARGETS = MOSQ_TARGETS + PLASM_TARGETS
 CUTADAPT_TARGETS = ANOSPP_TARGETS + ['unknown']
 
@@ -234,7 +234,7 @@ def prep_samples(samples_fn):
     if ('id_library_lims' in samples_df.columns and
         samples_df.id_library_lims.str.contains(':').all()):
             logging.info('inferring lims_plate_id from id_library_lims')
-            samples_df[['lims_plate_id','lims_well_id']] = samples_df.id_library_lims.str.split(
+            samples_df[['lims_plate_id', 'lims_well_id']] = samples_df.id_library_lims.str.split(
                 ':', n = 1, expand=True
                 )
     else:
@@ -318,7 +318,7 @@ def prep_stats(stats_fn):
             'cutadapt_passing_filters':'readthrough_pass_reads'
         },
         inplace=True)
-        # cutadapt stats recorded with commas
+        # cutadapt stats recorded with thousands comma separator
         for col in ('total_reads', 'readthrough_pass_reads'):
             stats_df[col] = stats_df[col].astype(str).str.replace(',', '').astype(int)
         stats_df.drop(
