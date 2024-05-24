@@ -189,7 +189,9 @@ def prep_samples(samples_fn):
         logging.info(f'preparing sample manifest from new style file {samples_fn}')
         samples_df = pd.read_csv(samples_fn, sep='\t', dtype='str')
         samples_df.rename(columns=({'derived_sample_id':'sample_id'}), inplace=True)
-        assert samples_df.irods_path.str.match('/seq/\d{5}/\d{5}_\d#\d+.cram').all()
+        assert samples_df.irods_path.str.match('/seq/\d{5}/\d{5}_\d#\d+.cram').all(), \
+            ('tsv sample manifest input requires irods_path column to be present '
+             'and match "/seq/12345/12345_1#123.cram"')
         samples_df['run_id'] = samples_df.irods_path.str.split('/').str.get(2)
         samples_df[['lane_index', 'tag_index']] = samples_df.irods_path \
             .str.split('/').str.get(3) \
