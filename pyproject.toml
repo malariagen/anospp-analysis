@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "anospp-analysis"
-version = "0.2.1"
+version = "0.3.0"
 description = "ANOSPP data analysis"
 authors = ["Alex Makunin <am60@sanger.ac.uk>",]
 license = "MIT"
@@ -19,6 +19,7 @@ tensorflow = "^2.12"
 bokeh = "*"
 
 [tool.poetry.group.dev.dependencies]
+jupyter = "*"
 
 [tool.poetry.scripts]
 anospp-prep = "anospp_analysis.prep:main"

@@ -46,9 +46,6 @@ def get_deplex_df(deplex_dir):
     # iterate over deplexed fasta files
     for fa in sorted(glob.glob(f'{deplex_dir}/ASV_*.fa')):
         target = fa.split('/')[-1].split('.')[0].split('_', maxsplit=1)[1]
-        if target not in CUTADAPT_TARGETS:
-            logging.warning(f'target {target} not recognized for {fa}')
-        #     continue
         # basic parser
         with open(fa) as f:
             for line in f:
@@ -80,15 +77,30 @@ def get_hap_df(dada_table, demult_dir):
         'lost some sequences in combining deplexing and original DADA2 data'
     
     hap_df = pd.melt(dada_deplex_df.reset_index(), 
-            id_vars=['dada2_id','sequence','target','trimmed_sequence'],
+            id_vars=['dada2_id', 'sequence', 'target', 'trimmed_sequence'],
             var_name='sample_id',
             value_name='reads')
-    hap_df = hap_df[hap_df.reads > 0].copy()
     hap_df['target'] = hap_df.target.astype(str)
+    if not hap_df['target'].isin(CUTADAPT_TARGETS).all():
+        logging.warning('non-ANOSPP targets detected in demultiplexing')
     hap_df.rename(columns={
         'sequence':'untrimmed_sequence',
         'trimmed_sequence':'consensus'
     }, inplace=True)
+    # collapse identical sequences
+    hap_df = hap_df.groupby(['sample_id', 'target', 'consensus'])['reads'].sum().reset_index()
+    # remove unsupported sequences
+    hap_df = hap_df.query('reads > 0').copy()
+
+    hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
+        ['reads'].transform('sum')
+    
+    hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
+
+    hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
+        ['consensus'].transform('nunique')
+
+    hap_df = seqid_generator(hap_df)
 
     return hap_df
 
@@ -106,7 +118,11 @@ def prep_dada2(args):
         'sample_id',
         'target',
         'consensus',
-        'reads'
+        'reads',
+        'total_reads',
+        'reads_fraction',
+        'nalleles',
+        'seqid'
     ]].to_csv(args.out_haps, sep='\t', index=False)
 
     logging.info('ANOSPP data prep complete')
@@ -114,7 +130,7 @@ def prep_dada2(args):
 def main():
     
     parser = argparse.ArgumentParser("Convert DADA2 output to ANOSPP haplotypes tsv")
-    parser.add_argument('-t', '--dada_table', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-t', '--dada_table', help='dada2 output table, in ampliseq pipeline it is called DADA2_table.tsv', required=True)
     parser.add_argument('-a', '--adapters', help='adapters fasta file for deplexing with cutadapt', required=True)
     parser.add_argument('-o', '--out_haps', help='output haplotypes tsv file. Default: haps.tsv', default='haps.tsv')
     parser.add_argument('-w', '--work_dir', help='working directory for intermediate files. Default: work',
