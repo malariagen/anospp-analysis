@@ -479,7 +479,8 @@ def generate_summary(comb_stats_df, version_name):
     ]
     return '\n'.join(summary)
 
-def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id, plasm_assignment_fn, plasm_colors_fn, read_count_threshold):
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id, 
+                                plasm_assignment_fn, plasm_colors_fn, read_count_threshold, legend_cutoff):
     
     logging.info(f'generating {level_label} level plots')
     #Generate bar plots at given assignment level
@@ -571,10 +572,12 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         ax2.tick_params(axis='x', rotation=90)
         ax2.set_xlim(ax.get_xlim())
     plt.tight_layout()
+
     # add legends after adjusting layout so that they span multiple subplots
     contam_artist = axs[0].legend(
         handles=[mpatches.Patch(color=color, label=label) for label, color in contam_colors.items()],
-        title='contamination risk (top text)',
+        title='Total target count (top number) colored\nby contamination risk',
+        alignment='left',
         bbox_to_anchor=(1,1.1),
         fontsize=10,
         ncols=2
@@ -584,15 +587,42 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     if plasm_assignment_fn is not None and plasm_colors_fn is not None:
         plasm_artist = axs[0].legend(
             handles=[mpatches.Patch(color=color, label=label) for label, color in plasm_legend_colors.items()],
-            title='Plasmodium (bottom text)',
-            bbox_to_anchor=(1,0.8),
+            title='Specimen ID label (bottom) colored by\nPlasmodium species detected',
+            bbox_to_anchor=(1,0.725),
+            alignment='left',
             fontsize=10,
             ncols=2
         )
         axs[0].add_artist(plasm_artist)
 
+    # subset legend to values observed over the cutoff
+    if legend_cutoff > 0:
+        logging.info(f'subsetting legend to observed labels at min frequency {legend_cutoff}')
+    flt_handles = []
+    flt_labels = []
+    for handle, label in zip(handles, labels):
+        max_freq = nn_level_result_df[label].max()
+        if max_freq >= legend_cutoff:
+            flt_handles.append(handle)
+            flt_labels.append(label)
+    # consistent legend title
+    leg_title_labels = {
+        'coarse':'Coarse',
+        'int':'Intermediate',
+        'fine':'Fine'
+    }
+    leg_title = f'{leg_title_labels[level_label]} level assignments'
+    if legend_cutoff > 0:
+        leg_title += f'\nwith observed proportion over {legend_cutoff}'
     # reverse species legend order to match barplot order
-    axs[0].legend(handles[::-1], labels[::-1], loc='upper left', bbox_to_anchor=(1,0.2), fontsize=10)
+    axs[0].legend(
+        flt_handles[::-1], flt_labels[::-1], 
+        title=leg_title,
+        loc='upper left',
+        alignment='left',
+        bbox_to_anchor=(1,0.1), 
+        fontsize=10
+        )
     # adding title in post - handling margins by savefig's bbox_inches='tight' at this point
     axs[0].set_title(f'NN assignment {level_label} level for run {run_id}', fontsize=20)
 
@@ -741,7 +771,8 @@ def nn(args):
                     run_id,
                     args.plasm_assignment,
                     args.plasm_colors,
-                    args.medium_contamination_read_count_threshold
+                    args.medium_contamination_read_count_threshold,
+                    args.legend_cutoff
                     )
                 fig.savefig(fig_fn, bbox_inches='tight')
 
@@ -806,6 +837,11 @@ def main():
                         'used for sample label colouring in nn plots. '
                         'Default: None - colouring not applied',
                         default=None)
+    parser.add_argument('--legend_cutoff',
+                        help='Minimum observed NN assignment proportion '
+                        'for species label to be added to the legend '
+                        'Default: 0 - include all species in reference index',
+                        default=0, type=float)
     parser.add_argument('--resume',
                         help='Do not re-generate nn_dist_to_ref.tsv and nn_assignment.tsv '
                         'if those are present in the output directory',
