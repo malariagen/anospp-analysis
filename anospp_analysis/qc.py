@@ -231,7 +231,7 @@ def plot_plate_stats(comb_stats_df, run_id, lims_plate=False):
     
     sns.stripplot(
         data=comb_stats_df,
-        y='targets_recovered',
+        y='raw_mosq_targets_recovered',
         x=plate_col,
         hue=plate_col,
         alpha=.3,
