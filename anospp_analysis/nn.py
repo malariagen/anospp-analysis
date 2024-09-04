@@ -39,6 +39,7 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
             f'removed {hap_df.shape[0] - filtered_hap_df.shape[0]} haplotypes '
             f'with fewer than {rc_threshold} reads or fraction lower than {rf_threshold} of reads'
         )
+    assert filtered_hap_df.shape[0] > 0, 'No haplotypes left after filtering, terminating'
     mosq_hap_df = filtered_hap_df[filtered_hap_df.target.isin(MOSQ_TARGETS)]
     mosq_hap_df = mosq_hap_df.astype({'target': int})
 
@@ -130,6 +131,7 @@ def parse_seqids_series(seqids):
     Parse seqid or seqids passed as a pandas Series
     '''
     parsed_seqids = seqids.str.split('-', expand=True)
+    # assert parsed_seqids.shape[1] == 2, 'Failed to parse seqids, we expected only one "-" in each seqid'
     parsed_seqids.columns = ['target', 'uidx']
     
     assert parsed_seqids['target'].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
@@ -139,7 +141,7 @@ def parse_seqids_series(seqids):
         raise Exception('Dataframe contains seqids which cannot be converted to integers')
     return parsed_seqids
 
-def construct_unique_kmer_table(mosq_hap_df, k):
+def construct_unique_kmer_table(mosq_hap_df, k, source):
     '''
     constructs a k-mer table of dimensions n_amp * maxallele * 4**k
     represting the k-mer table of each unique sequence in the dataframe
@@ -149,7 +151,7 @@ def construct_unique_kmer_table(mosq_hap_df, k):
     output: k-mer table representing each unique haplotype in the hap dataframe
     '''
 
-    logging.info('translating unique sequences to k-mers')
+    logging.info(f'translating unique sequences from {source} to {k}-mers')
 
     kmerdict = construct_kmer_dict(k)
     #subset to unique haplotypes
@@ -670,8 +672,8 @@ def nn(args):
                 if len(ll) == 3:
                     nndict[ll[0]] = ([int(i) for i in ll[1].split('|')], float(ll[2]))
     else:
-        kmers = construct_unique_kmer_table(mosq_hap_df, args.kmer_length)
-        ref_kmers = construct_unique_kmer_table(ref_hap_df, args.kmer_length)
+        kmers = construct_unique_kmer_table(mosq_hap_df, args.kmer_length, source='samples')
+        ref_kmers = construct_unique_kmer_table(ref_hap_df, args.kmer_length, source=args.reference_version)
 
         error_seqs = identify_error_seqs(mosq_hap_df, kmers, args.kmer_length, args.n_error_snps)
         non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
