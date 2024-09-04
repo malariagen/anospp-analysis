@@ -6,7 +6,7 @@ ANOSPP is the multiplexed amplicon sequencing assay for Anopheles mosquito speci
 
 ## Installation
 
-For released version
+For latest released version
 
 ```bash
 conda install -c bioconda anospp-analysis
@@ -59,7 +59,6 @@ $ python
 ['P1', 'P2']
 ```
 
-TODO Automated testing & CI
 
 ### Adding Python deps
 
@@ -89,13 +88,13 @@ Introducing non-python dependencies should be done via conda: edit `environment.
 then re-create the conda environment and poetry deps:
 
 ```bash
-mamba env create -f environment.yml
+conda env create -f environment.yml
 conda activate anospp_analysis
 poetry install
 ```
 
-Changes in conda environment might also introduce changes to the python installation,
-in which case one should update poetry lock file
+If changes in conda environment introduce changes to the python installation,
+one should update poetry lock file
 
 ```bash
 poetry lock
