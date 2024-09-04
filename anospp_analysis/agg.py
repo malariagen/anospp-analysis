@@ -1,6 +1,4 @@
 import pandas as pd
-import numpy as np
-import os
 import argparse
 
 from anospp_analysis.util import *

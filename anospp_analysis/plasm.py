@@ -2,10 +2,6 @@ import argparse
 import os
 import sys
 import subprocess
-import matplotlib
-matplotlib.use('Agg')
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 from anospp_analysis.util import *
 from anospp_analysis.iplot import plot_plate_view

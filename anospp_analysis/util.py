@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import logging
 
 MOSQ_TARGETS = [str(i) for i in range(62)]

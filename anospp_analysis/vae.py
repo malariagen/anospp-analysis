@@ -120,9 +120,9 @@ def prep_kmers(vae_hap_df, vae_samples, k):
     Prepare k-mer table for the samples to be run through VAE
     '''
     #translate unique sequences to k-mers
-    kmers_unique_seqs = construct_unique_kmer_table(vae_hap_df, k)
+    kmers_unique_seqs = construct_unique_kmer_table(vae_hap_df, k, source='vae samples')
     
-    logging.info('generating k-mer tables for selected samples')
+    # logging.info('generating k-mer tables for selected samples')
 
     #set up k-mer table
     kmers_samples = np.zeros((len(vae_samples), 4**k))
