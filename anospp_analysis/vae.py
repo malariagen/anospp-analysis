@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+
 import argparse
 import keras
 from scipy.spatial import ConvexHull, Delaunay
@@ -196,10 +199,12 @@ def predict_latent_pos(kmer_table, vae_samples, k, vae_weights_file):
     Predict latent space of test samples based on reference database
     '''
 
+    logging.info('predicting latent space of test samples based on reference database')
+
     vae, encoder = define_vae(k)
 
     vae.load_weights(vae_weights_file)
-    predicted_latent_pos = encoder.predict(kmer_table)
+    predicted_latent_pos = encoder.predict(kmer_table, verbose=False)
 
     predicted_latent_pos_df = pd.DataFrame(
         index=vae_samples, 
@@ -692,6 +697,9 @@ def vae(args):
             fig.savefig(f'{args.outdir}/vae_assignment.png')
 
     ch_assignment_df['vae_ref'] = args.reference_version
+    logging.warning('Changing VAE species predictions prefix from "Anopheles_" to "An_"')
+    ch_assignment_df['vae_species_call'] = ch_assignment_df['vae_species_call'] \
+        .str.replace('^Anopheles_','An_', regex=True)
     ch_assignment_df.to_csv(f'{args.outdir}/vae_assignment.tsv', sep='\t')
 
     summary_text = generate_summary(ch_assignment_df, nn_stats_df, version_name)
