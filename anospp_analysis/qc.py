@@ -59,9 +59,12 @@ def plot_target_balance(hap_df, run_id):
 
     return fig, ax
 
-def plot_allele_balance(hap_df, run_id):
+def plot_allele_balance(hap_df, run_id, anospp=True):
     
     logging.info('plotting allele balance and coverage')
+
+    if anospp:
+        hap_df = hap_df[hap_df.target.isin(MOSQ_TARGETS)]
 
     is_het = (hap_df.reads_fraction < 1)
     het_frac = hap_df[is_het].reads_fraction
@@ -297,11 +300,12 @@ def plot_sample_success(comb_stats_df, run_id, anospp=True):
 
     logging.info('plotting sample success')
 
-    ycol = 'raw_mosq_targets_recovered' if anospp else 'targets_recovered'
+    ycol = 'raw_mosq_reads' if anospp else 'target_reads'
+    tgtcol = 'raw_mosq_targets_recovered' if anospp else 'targets_recovered'
 
     fig, axs = plt.subplots(1, 2, figsize=(12,6), constrained_layout=True)
     fig.suptitle(f'Key stats covariation for run {run_id}')
-    for xcol, ax in zip(('raw_mosq_reads', 'overall_filter_rate'), axs):
+    for xcol, ax in zip((tgtcol, 'overall_filter_rate'), axs):
         sns.scatterplot(
             data=comb_stats_df,
             x=xcol,
@@ -310,14 +314,15 @@ def plot_sample_success(comb_stats_df, run_id, anospp=True):
             alpha=.5, 
             ax=ax
             )
-        ax.set_ylim(bottom=0)
-        if anospp:
-            ax.axhline(10, c='silver', alpha=.5)
-            ax.axhline(50, c='silver', alpha=.5)
-            ax.set_ylim(top=62)
-    axs[0].set_xscale('log')
-    axs[0].set_xlim(left=1)
-    axs[0].axvline(1000, c='silver', alpha=.5)
+        ax.set_yscale('log')
+        ax.set_ylim(bottom=1)
+        ax.axhline(1000, c='silver', alpha=.5)
+    
+    axs[0].set_xlim(left=0)
+    if anospp:
+        axs[0].axvline(10, c='silver', alpha=.5)
+        axs[0].axvline(50, c='silver', alpha=.5)
+        axs[0].set_xlim(right=62)
     axs[1].axvline(.5, c='silver', alpha=.5)
     axs[1].set_xlim(left=0, right=1)
     axs[1].get_legend().remove()
@@ -443,7 +448,8 @@ def qc(args):
     fig, _ = plot_target_balance(hap_df, run_id)
     fig.savefig(f'{args.outdir}/target_balance.png')
 
-    fig = plot_allele_balance(hap_df, run_id)
+    # allele balance plotted for mosuqito targets only
+    fig = plot_allele_balance(hap_df, run_id, anospp=anospp)
     fig.savefig(f'{args.outdir}/allele_balance.png')
 
     fig, _ = plot_well_balance(comb_stats_df, run_id)
@@ -454,8 +460,8 @@ def qc(args):
     #     fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col, run_id)
     #     fig.savefig(f'{args.outdir}/sample_target_{col}.png')
 
-    fig, _ = plot_sample_filtering(comb_stats_df, run_id, anospp)
-    fig.savefig(f'{args.outdir}/filter_per_sample.png')
+    # fig, _ = plot_sample_filtering(comb_stats_df, run_id, anospp)
+    # fig.savefig(f'{args.outdir}/filter_per_sample.png')
 
     # set of plots tweaked for anospp only 
     if anospp:
