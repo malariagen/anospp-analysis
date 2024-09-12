@@ -29,7 +29,7 @@ SUM_HAP_COLS = [
         'consensus'
     ]
 
-def run_blast(plasm_hap_df, outdir, blastdb, max_mismatch, min_qcov):
+def run_blast(plasm_hap_df, outdir, blastdb, min_pident, min_qcov):
 
     logging.info('running blast')
 
@@ -70,14 +70,14 @@ def run_blast(plasm_hap_df, outdir, blastdb, max_mismatch, min_qcov):
     blast_df['species'] = blast_df.sseqid.str.split('_').str.get(1)
     blast_df['binomial'] = blast_df['genus'] + '_' + blast_df['species']
     blast_df['species_assignment'] = blast_df['binomial']
-    unknown_species = ((blast_df.mismatch > max_mismatch) | (blast_df.qcovs < min_qcov))
+    unknown_species = ((blast_df.pident < min_pident) | (blast_df.qcovs < min_qcov))
     blast_df.loc[unknown_species, 'species_assignment'] = 'unknown'
     blast_df['ref_seqid'] = blast_df.sseqid.str.split(':').str.get(1)
 
     def assign_hap_id(blast_row):
-
+        
+        # most annotations require both 100% coverage and identity    
         if blast_row.pident == 100:
-            # most annotations require both 100% coverage and identity
             if blast_row.qcovs == 100:
                 return blast_row.ref_seqid
             # M annotations require lower query coverage
@@ -105,7 +105,6 @@ def estimate_contamination(hap_df, sample_df, min_samples, min_source_reads, max
     logging.info('estimating cross-contamination')
 
     hap_df = hap_df[['sample_id', 'seqid', 'reads']]
-    ext_df = sample_df[['sample_id', 'plate_id', 'well_id']]
     ext_hap_df = pd.merge(hap_df, sample_df, on='sample_id', how='left')
 
     assert ~ext_hap_df['well_id'].isna().any(), 'failed to get well IDs'
@@ -276,7 +275,7 @@ def plasm(args):
             plasm_hap_df, 
             args.outdir, 
             blastdb,
-            args.blast_max_mismatch,
+            args.blast_min_pident,
             args.blast_min_qcov
             )
 
@@ -343,9 +342,10 @@ def main():
     parser.add_argument('--blast_db_prefix', 
                         help='Blast database prefix in reference index', 
                         default='plasmomito_P1P2_DB_v1.0')
-    parser.add_argument('--blast_max_mismatch', 
-                        help='Maximum number of blast alignment mismatches for haplotype assignment to species. Default: 1',  
-                        default=1, type=int)
+    parser.add_argument('--blast_min_pident', 
+                        help=('Minimum blast percent identity for haplotype assignment to species. '
+                              'Default: 99 - corresponds to 2 SNPs or indels per ~210bp target'),
+                        default=99, type=float)
     parser.add_argument('--blast_min_qcov', 
                         help='Minimum blast alignment query coverage for haplotype assignment to species. Default: 96',  
                         default=96, type=int)
