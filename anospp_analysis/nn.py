@@ -481,8 +481,7 @@ def generate_summary(comb_stats_df, version_name):
     ]
     return '\n'.join(summary)
 
-def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id, 
-                                plasm_assignment_fn, plasm_colors_fn, read_count_threshold, legend_cutoff):
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, run_id, plasm_assignment_df, plasm_colors, args):
     
     logging.info(f'generating {level_label} level plots')
     #Generate bar plots at given assignment level
@@ -509,15 +508,14 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     }
 
     # plasm color scheme - applied to bottom ticks
-    if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+    if plasm_assignment_df is not None and plasm_colors is not None:
         logging.info(f'using plasm predictions to colour sample labels')
-        plasm_df = pd.read_csv(plasm_assignment_fn, sep='\t')
-        plasm_df['plasmodium_species'] = plasm_df['plasmodium_species'].fillna('')
-        plasm_spp = plasm_df.set_index('sample_id')['plasmodium_species'].to_dict()
+        plasm_assignment_df['plasmodium_species'] = plasm_assignment_df['plasmodium_species'].fillna('')
+        plasm_spp = plasm_assignment_df.set_index('sample_id')['plasmodium_species'].to_dict()
         assert set(plasm_spp.keys()) == set(comb_stats_df.sample_id), \
             'plasmodium assignment samples do not match nn samples'
 
-        plasm_colors = pd.read_csv(plasm_colors_fn).set_index('species')['color']
+        
         # named species in legend - remove genus name
         plasm_legend_colors = {sp[11:]:color for sp, color in plasm_colors.iloc[:6].to_dict().items()}
         # other species collapsed
@@ -537,20 +535,41 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     for plate, ax in zip(plates, axs):
         plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().reset_index()
         plot_df['well_id'] = well_ordering(plot_df['well_id'])
+        plot_df['mosq_targets_recovered'] = plot_df['mosq_targets_recovered'].astype(str)
+        # mark locov samples
+        plot_df.loc[
+            plot_df.mosq_reads < args.medium_contamination_read_count_threshold,
+            'mosq_targets_recovered'
+        ] = plot_df['mosq_targets_recovered'] + '*'
+        # grey locov samples
+        plot_df.loc[
+            plot_df.mosq_reads < args.medium_contamination_read_count_threshold,
+            'contamination_risk'
+        ] = 'low'
+
         plot_samples = plot_df['sample_id']
-        nn_level_result_df.loc[plot_samples].plot(
-            kind='bar', stacked=True, width=1, ax=ax, color=level_colors
-        )
-        ax.axhline(nn_asgn_threshold, color='k', ls=':', linewidth=1)
+        # plot nn proportions for plate
+        nn_level_result_plot_df = nn_level_result_df.loc[plot_samples]
+        # TODO remove all-zero columns to speed up plotting - color index->label
+        nn_level_result_plot_df.plot(
+                kind='bar', stacked=True, width=1, ax=ax, color=level_colors
+                )
+        # remove zero size patches post-hoc
+        for patch in ax.patches[:]:  # Copy list of patches to avoid modifying while iterating
+            if isinstance(patch, mpatches.Rectangle):
+                if patch.get_width() == 0 or patch.get_height() == 0:
+                    patch.remove()
+        ax.axhline(args.nn_assignment_threshold, color='k', ls=':', linewidth=1)
         ax.set_ylim(0, 1)
         ax.set_yticks([])
         ax.set_ylabel(plate, fontsize=16)
         handles, labels = ax.get_legend_handles_labels()
         ax.get_legend().remove()
         
+        # bottom ticks - species name coloured by plasm
         ax.set_xticks(range(plot_df.shape[0]))
         ax.set_xticklabels(plot_df['sample_name'])
-        if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+        if plasm_assignment_df is not None and plasm_colors is not None:
             for i, r in plot_df.iterrows():
                 sample_plasm_sp = plasm_spp[r.sample_id]
                 # multiple species infection
@@ -564,21 +583,26 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
                     ax.get_xticklabels()[i].set_color('grey')
         ax.tick_params(axis='x', rotation=90)
         
+        # top ticks - targets coloured by contamination risk
         ax2 = ax.twiny()
         ax2.set_xticks(range(plot_df.shape[0]))
         ax2.set_xticklabels(plot_df['mosq_targets_recovered'])
         for i, r in plot_df.iterrows():
             ax2.get_xticklabels()[i].set_color(contam_colors[r.contamination_risk])
-            if r.mosq_reads < read_count_threshold:
-                ax2.get_xticklabels()[i].set_fontstyle('oblique')
         ax2.tick_params(axis='x', rotation=90)
         ax2.set_xlim(ax.get_xlim())
     plt.tight_layout()
 
     # add legends after adjusting layout so that they span multiple subplots
+    contam_relabel = {
+            'low':f'{args.medium_contamination_multi_allelic_threshold} or locov',
+            'medium':f'{args.medium_contamination_multi_allelic_threshold+1}-{args.high_contamination_multi_allelic_threshold}',
+            'high':f'{args.high_contamination_multi_allelic_threshold+1}-{args.very_high_contamination_multi_allelic_threshold}',
+            'very_high':f'{args.very_high_contamination_multi_allelic_threshold+1} or more'
+        }
     contam_artist = axs[0].legend(
-        handles=[mpatches.Patch(color=color, label=label) for label, color in contam_colors.items()],
-        title='Total target count (top number) colored\nby contamination risk',
+        handles=[mpatches.Patch(color=color, label=contam_relabel[label]) for label, color in contam_colors.items()],
+        title=f'Total target count (top number) colored\nby multiallelic targets (* locov, <{args.medium_contamination_read_count_threshold} reads)',
         alignment='left',
         bbox_to_anchor=(1,1.1),
         fontsize=10,
@@ -586,7 +610,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     )
     axs[0].add_artist(contam_artist)
 
-    if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+    if plasm_assignment_df is not None and plasm_colors is not None:
         plasm_artist = axs[0].legend(
             handles=[mpatches.Patch(color=color, label=label) for label, color in plasm_legend_colors.items()],
             title='Specimen ID label (bottom) colored by\nPlasmodium species detected',
@@ -598,13 +622,13 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         axs[0].add_artist(plasm_artist)
 
     # subset legend to values observed over the cutoff
-    if legend_cutoff > 0:
-        logging.info(f'subsetting legend to observed labels at min frequency {legend_cutoff}')
+    if args.legend_cutoff > 0:
+        logging.info(f'subsetting legend to observed labels at min frequency {args.legend_cutoff}')
     flt_handles = []
     flt_labels = []
     for handle, label in zip(handles, labels):
         max_freq = nn_level_result_df[label].max()
-        if max_freq >= legend_cutoff:
+        if max_freq >= args.legend_cutoff:
             flt_handles.append(handle)
             flt_labels.append(label)
     # consistent legend title
@@ -613,9 +637,9 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         'int':'Intermediate',
         'fine':'Fine'
     }
-    leg_title = f'{leg_title_labels[level_label]} level assignments'
-    if legend_cutoff > 0:
-        leg_title += f'\nwith observed proportion over {legend_cutoff}'
+    leg_title = f'{leg_title_labels[level_label]} NN level mosquito species assignments'
+    if args.legend_cutoff > 0:
+        leg_title += f'\nwith observed proportion over {args.legend_cutoff}'
     # reverse species legend order to match barplot order
     axs[0].legend(
         flt_handles[::-1], flt_labels[::-1], 
@@ -626,7 +650,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         fontsize=10
         )
     # adding title in post - handling margins by savefig's bbox_inches='tight' at this point
-    axs[0].set_title(f'NN assignment {level_label} level for run {run_id}', fontsize=20)
+    axs[0].set_title(f'NN assignment {level_label} level for {run_id}', fontsize=20)
 
     return fig, axs
 
@@ -759,6 +783,14 @@ def nn(args):
         fn.write(summary_text)
 
     if not args.no_plotting:
+
+        if args.plasm_assignment is not None and args.plasm_colors is not None:
+            plasm_df = pd.read_csv(args.plasm_assignment, sep='\t')
+            plasm_colors = pd.read_csv(args.plasm_colors).set_index('species')['color']
+        else:
+            plasm_df = None
+            plasm_colors = None
+
         for level in ['coarse', 'int', 'fine']:
             fig_fn = f'{args.outdir}/{level}_assignment.png'
             if args.resume and os.path.isfile(fig_fn):
@@ -768,13 +800,11 @@ def nn(args):
                     comb_stats_df, 
                     results_dfs[level], 
                     level, 
-                    colors[level], 
-                    args.nn_assignment_threshold,
+                    colors[level],
                     run_id,
-                    args.plasm_assignment,
-                    args.plasm_colors,
-                    args.medium_contamination_read_count_threshold,
-                    args.legend_cutoff
+                    plasm_df,
+                    plasm_colors,
+                    args
                     )
                 fig.savefig(fig_fn, bbox_inches='tight')
 
