@@ -533,8 +533,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     if nplates == 1:
         axs = [axs]
     for plate, ax in zip(plates, axs):
-        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().reset_index()
-        plot_df['well_id'] = well_ordering(plot_df['well_id'])
+        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().reset_index().sort_values('well_id')
         plot_df['mosq_targets_recovered'] = plot_df['mosq_targets_recovered'].astype(str)
         # mark locov samples
         plot_df.loc[
