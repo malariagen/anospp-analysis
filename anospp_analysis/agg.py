@@ -142,24 +142,6 @@ def agg(args):
 
     validate_aggregation(comb_df)
 
-    # temp - remove excessive plasm columns in post
-    comb_df.drop(columns=[
-        'p1_hapids_pass',	
-        'p1_hapids_pass_reads',
-        'p1_species_assignments_pass',
-        'p1_hapids_contam',
-        'p1_hapids_contam_reads',
-        'p1_hapids_locov',
-        'p1_hapids_locov_reads',
-        'p2_hapids_pass',	
-        'p2_hapids_pass_reads',
-        'p2_species_assignments_pass',
-        'p2_hapids_contam',
-        'p2_hapids_contam_reads',
-        'p2_hapids_locov',
-        'p2_hapids_locov_reads',
-    ], inplace=True)
-
     logging.info(f'writing merged results to {args.out}')
     comb_df.to_csv(args.out, sep='\t', index=False)
 
