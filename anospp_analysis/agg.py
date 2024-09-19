@@ -19,7 +19,7 @@ def validate_aggregation(comb_df):
         'p1_reads_pass', 'p2_reads_pass', 'plasmodium_detection_status', 'plasm_ref',
         # skip plasm hap
         'multiallelic_mosq_targets', 'mosq_reads', 'mosq_targets_recovered',
-        'nn_assignment', 'contamination_risk', 'nn_species_call', 'nn_call_method', 'nn_ref',
+        'nn_assignment', 'nn_species_call', 'nn_call_method', 'nn_ref',
         # skip vae
         'nnovae_mosquito_species', 'nnovae_call_method'
         ]:

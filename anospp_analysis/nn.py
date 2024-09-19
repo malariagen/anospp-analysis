@@ -182,8 +182,8 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     #set the k-mer threshold for the number of snps allowed for errors
     threshold = n_error_snps * k + 1
     seqid_size = mosq_hap_df.groupby('seqid').size()
-    singleton_seqids = seqid_size[seqid_size == 1].index
-    error_candidates = mosq_hap_df.query('(seqid in @singleton_seqids) & (nalleles>2)')
+    singleton_seqids = seqid_size[seqid_size == 1].index # used in query
+    error_candidates = mosq_hap_df.query('(seqid in @singleton_seqids) & (nalleles > 2)')
 
     error_seqs = []
     for _, cand in error_candidates.iterrows():
@@ -350,52 +350,6 @@ def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
 
     return comb_stats_df
 
-def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets,
-                           rc_med_threshold, ma_med_threshold, ma_hi_threshold, ma_vh_threshold):
-    '''
-    estimate contamination from read counts and multiallelic targets
-    '''
-    logging.info('estimating contamination risk')
-
-    #Read in exceptions from true_multi_targets file
-    for idx, item in true_multi_targets.iterrows():
-        potentially_affected_samples = comb_stats_df.loc[comb_stats_df[f'nn_{item.level}'] == item.sgp, 'sample_id']
-        affected_samples = non_error_hap_df \
-            .query('(sample_id in @potentially_affected_samples) & (target == @item.target)') \
-            .groupby('sample_id') \
-            .filter(
-                lambda x: (x['seqid'].nunique() > 2) & (x['seqid'].nunique() <= item.admissable_alleles)
-                ) \
-            ['sample_id'].unique()
-        comb_stats_df.loc[comb_stats_df.sample_id.isin(affected_samples), 'multiallelic_mosq_targets'] -= 1
-
-    comb_stats_df['contamination_risk'] = 'low'
-    comb_stats_df.loc[
-        comb_stats_df.mosq_reads < rc_med_threshold,
-        'contamination_risk'
-    ] = 'medium'
-    comb_stats_df.loc[
-        comb_stats_df.multiallelic_mosq_targets > ma_med_threshold,
-        'contamination_risk'
-    ] = 'medium'
-    comb_stats_df.loc[
-        comb_stats_df.multiallelic_mosq_targets > ma_hi_threshold,
-        'contamination_risk'
-    ] = 'high'
-    comb_stats_df.loc[
-        comb_stats_df.multiallelic_mosq_targets > ma_vh_threshold,
-        'contamination_risk'
-    ] = 'very_high'
-
-    logging.info(
-        f'identified {(comb_stats_df.contamination_risk == "very_high").sum()} samples with very high contamination risk, '
-        f'{(comb_stats_df.contamination_risk == "high").sum()} samples with high contamination risk, '
-        f'{(comb_stats_df.contamination_risk == "medium").sum()} samples with medium contamination risk '
-        f'and {(comb_stats_df.contamination_risk == "low").sum()} samples with low contamination risk'
-        )
-
-    return comb_stats_df
-
 def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_dfs,
                         true_multi_targets, nn_asgn_threshold,
                         rc_med_threshold, ma_med_threshold, ma_hi_threshold, ma_vh_threshold):
@@ -417,16 +371,6 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
                 lambda row: results_dfs[level].columns[row >= nn_asgn_threshold][0],
                 axis=1))
         comb_stats_df[f'nn_{level}'] = comb_stats_df.sample_id.map(asgn_dict)
-
-    comb_stats_df = estimate_contamination(
-        comb_stats_df,
-        non_error_hap_df,
-        true_multi_targets,
-        rc_med_threshold,
-        ma_med_threshold,
-        ma_hi_threshold,
-        ma_vh_threshold
-    )
 
     comb_stats_df['nn_species_call'] = None
     comb_stats_df['nn_call_method'] = None
@@ -459,10 +403,6 @@ def generate_summary(comb_stats_df, version_name):
     summary = [
         f'Nearest Neighbour assignment using reference version {version_name}',
         f'On run containing {comb_stats_df.sample_id.nunique()} samples',
-        f'{(comb_stats_df.contamination_risk == "very_high").sum()} samples have very high contamination risk',
-        f'{(comb_stats_df.contamination_risk == "high").sum()} samples have high contamination risk',
-        f'{(comb_stats_df.contamination_risk == "medium").sum()} samples have medium contamination risk',
-        f'{(comb_stats_df.contamination_risk == "low").sum()} samples have low contamination risk',
         f'{(comb_stats_df.nn_assignment=="no").sum()} samples with < 10 targets lack NN assignment',
         f'{(~comb_stats_df.nn_coarse.isnull()).sum()} samples are assigned at coarse level',
         f'to {comb_stats_df.nn_coarse.nunique()} different species groups',
@@ -471,13 +411,9 @@ def generate_summary(comb_stats_df, version_name):
         f'{(~comb_stats_df.nn_fine.isnull()).sum()} samples are assigned at fine level',
         f'to {comb_stats_df.nn_fine.nunique()} different species groups',
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_int", "sample_id"].nunique()} '
-         'samples with sufficient coverage could not be assigned at intermediate level',
-        f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_int") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
-         'of those have medium or higher contamination risk',
+        f'samples with sufficient coverage could not be assigned at intermediate level',
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_coarse", "sample_id"].nunique()} '
-         'samples with sufficient coverage could not be assigned at coarse level',
-        f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_coarse") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
-         'of those have medium or higher contamination risk'
+        f'samples with sufficient coverage could not be assigned at coarse level',
     ]
     return '\n'.join(summary)
 
@@ -499,13 +435,25 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
             )
         ]).fillna(0)
 
-    # contamination color scheme - applied to top ticks 
-    contam_colors = {
-        'low':'#808080',
-        'medium':'#FF9900',
-        'high':'#cc00FF',
-        'very_high':'#FF0000'
+    # multiallelics bands
+    comb_stats_df['ma_band'] = '0'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 0, 'ma_band'] = '1-2'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 2, 'ma_band'] = '3-4'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 4, 'ma_band'] = '5+'
+    # multiallelics color scheme - applied to top ticks 
+    ma_colors = {
+        '0':'#808080',
+        '1-2':'#FF9900',
+        '3-4':'#cc00FF',
+        '5+':'#FF0000'
     }
+
+    # mark low coverage samples
+    comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].astype(str)
+    comb_stats_df.loc[
+        comb_stats_df['mosq_reads'] < args.locov_rc,
+        'mosq_targets_recovered'
+    ] = comb_stats_df['mosq_targets_recovered'] + '*'
 
     # plasm color scheme - applied to bottom ticks
     if plasm_assignment_df is not None and plasm_colors is not None:
@@ -515,7 +463,6 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         assert set(plasm_spp.keys()) == set(comb_stats_df.sample_id), \
             'plasmodium assignment samples do not match nn samples'
 
-        
         # named species in legend - remove genus name
         plasm_legend_colors = {sp[11:]:color for sp, color in plasm_colors.iloc[:6].to_dict().items()}
         # other species collapsed
@@ -533,18 +480,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     if nplates == 1:
         axs = [axs]
     for plate, ax in zip(plates, axs):
-        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().reset_index().sort_values('well_id')
-        plot_df['mosq_targets_recovered'] = plot_df['mosq_targets_recovered'].astype(str)
-        # mark locov samples
-        plot_df.loc[
-            plot_df.mosq_reads < args.medium_contamination_read_count_threshold,
-            'mosq_targets_recovered'
-        ] = plot_df['mosq_targets_recovered'] + '*'
-        # grey locov samples
-        plot_df.loc[
-            plot_df.mosq_reads < args.medium_contamination_read_count_threshold,
-            'contamination_risk'
-        ] = 'low'
+        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().sort_values('well_id').reset_index()
 
         plot_samples = plot_df['sample_id']
         # plot nn proportions for plate
@@ -582,39 +518,35 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
                     ax.get_xticklabels()[i].set_color('grey')
         ax.tick_params(axis='x', rotation=90)
         
-        # top ticks - targets coloured by contamination risk
+        # top ticks - targets coloured by multiallelics band
         ax2 = ax.twiny()
         ax2.set_xticks(range(plot_df.shape[0]))
         ax2.set_xticklabels(plot_df['mosq_targets_recovered'])
         for i, r in plot_df.iterrows():
-            ax2.get_xticklabels()[i].set_color(contam_colors[r.contamination_risk])
+            ax2.get_xticklabels()[i].set_color(ma_colors[r.ma_band])
         ax2.tick_params(axis='x', rotation=90)
         ax2.set_xlim(ax.get_xlim())
     plt.tight_layout()
 
     # add legends after adjusting layout so that they span multiple subplots
-    contam_relabel = {
-            'low':f'{args.medium_contamination_multi_allelic_threshold} or locov',
-            'medium':f'{args.medium_contamination_multi_allelic_threshold+1}-{args.high_contamination_multi_allelic_threshold}',
-            'high':f'{args.high_contamination_multi_allelic_threshold+1}-{args.very_high_contamination_multi_allelic_threshold}',
-            'very_high':f'{args.very_high_contamination_multi_allelic_threshold+1} or more'
-        }
-    contam_artist = axs[0].legend(
-        handles=[mpatches.Patch(color=color, label=contam_relabel[label]) for label, color in contam_colors.items()],
-        title=f'Total target count (top number) colored\nby multiallelic targets (* locov, <{args.medium_contamination_read_count_threshold} reads)',
+    ma_artist = axs[0].legend(
+        handles=[mpatches.Patch(color=color, label=label) for label, color in ma_colors.items()],
+        title=f'Total target count (top number) colored\nby multiallelic targets (* locov, <{args.locov_rc} reads)',
         alignment='left',
+        loc='upper left',
         bbox_to_anchor=(1,1.1),
         fontsize=10,
         ncols=2
     )
-    axs[0].add_artist(contam_artist)
+    axs[0].add_artist(ma_artist)
 
     if plasm_assignment_df is not None and plasm_colors is not None:
         plasm_artist = axs[0].legend(
             handles=[mpatches.Patch(color=color, label=label) for label, color in plasm_legend_colors.items()],
             title='Specimen ID label (bottom) colored by\nPlasmodium species detected',
-            bbox_to_anchor=(1,0.725),
             alignment='left',
+            loc='upper left',
+            bbox_to_anchor=(1,0.725),
             fontsize=10,
             ncols=2
         )
@@ -643,8 +575,8 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     axs[0].legend(
         flt_handles[::-1], flt_labels[::-1], 
         title=leg_title,
-        loc='upper left',
         alignment='left',
+        loc='upper left',
         bbox_to_anchor=(1,0.1), 
         fontsize=10
         )
@@ -750,11 +682,7 @@ def nn(args):
             test_samples,
             results_dfs, 
             true_multi_targets, 
-            nn_asgn_threshold=args.nn_assignment_threshold,
-            rc_med_threshold=args.medium_contamination_read_count_threshold,
-            ma_med_threshold=args.medium_contamination_multi_allelic_threshold,
-            ma_hi_threshold=args.high_contamination_multi_allelic_threshold,
-            ma_vh_threshold=args.very_high_contamination_multi_allelic_threshold
+            nn_asgn_threshold=args.nn_assignment_threshold
         )
 
         comb_stats_df['nn_ref'] = args.reference_version
@@ -769,7 +697,6 @@ def nn(args):
             'nn_coarse',
             'nn_int',
             'nn_fine',
-            'contamination_risk',
             'nn_species_call',
             'nn_call_method',
             'nn_ref'
@@ -837,18 +764,9 @@ def main():
     parser.add_argument('--hap_reads_fraction_threshold',
                         help='Minimum fraction of reads for supported haplotypes. Default: 0.1',
                         default=0.1, type=float)
-    parser.add_argument('--medium_contamination_read_count_threshold',
-                        help='Samples with fewer than this number of reads get medium contamination risk. Default: 1000',
+    parser.add_argument('--locov_rc',
+                        help='Samples with fewer than this number of reads are marked as low coverage in plot. Default: 1000',
                         default=1000, type=int)
-    parser.add_argument('--medium_contamination_multi_allelic_threshold',
-                        help='Samples with more than this number of multiallelic targets get medium contamination risk. Default: 0',
-                        default=0, type=int)
-    parser.add_argument('--high_contamination_multi_allelic_threshold',
-                        help='Samples with more than this number of multiallelic targets get high contamination risk. Default: 2',
-                        default=2, type=int)
-    parser.add_argument('--very_high_contamination_multi_allelic_threshold',
-                        help='Samples with more than this number of multiallelic targets get very high contamination risk. Default: 4',
-                        default=4, type=int)
     parser.add_argument('--nn_assignment_threshold',
                         help='Required fraction for calling assignment. Default: 0.8',
                         default=0.8, type=float)
