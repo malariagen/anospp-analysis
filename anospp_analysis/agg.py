@@ -140,7 +140,8 @@ def agg(args):
         'nnovae_call_method'
     ] = 'VAE'
 
-    validate_aggregation(comb_df)
+    if not args.force:
+        validate_aggregation(comb_df)
 
     logging.info(f'writing merged results to {args.out}')
     comb_df.to_csv(args.out, sep='\t', index=False)
@@ -167,8 +168,11 @@ def main():
     parser.add_argument('-o', '--out', 
                         help='Output aggregated sample metadata tsv. Default: anospp_results.tsv', 
                         default='anospp_results.tsv')
+    parser.add_argument('-f', '--force', 
+                        help='Skip aggregation validation', action='store_true', default=False)
     parser.add_argument('-v', '--verbose', 
-                        help='Include INFO level log messages', action='store_true')
+                        help='Include INFO level log messages', action='store_true', default=True)
+                        
 
     args = parser.parse_args()
 
