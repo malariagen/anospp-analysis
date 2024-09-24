@@ -351,8 +351,7 @@ def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
     return comb_stats_df
 
 def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_dfs,
-                        true_multi_targets, nn_asgn_threshold,
-                        rc_med_threshold, ma_med_threshold, ma_hi_threshold, ma_vh_threshold):
+                        true_multi_targets, nn_asgn_threshold):
 
     logging.info('generating NN calls from assignment info')
 
@@ -417,15 +416,33 @@ def generate_summary(comb_stats_df, version_name):
     ]
     return '\n'.join(summary)
 
-def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, run_id, plasm_assignment_df, plasm_colors, args):
-    
-    logging.info(f'generating {level_label} level plots')
-    #Generate bar plots at given assignment level
+def prep_stats_for_plotting(comb_stats_df, locov_rc):
+
     #Get row and col info from well_id for ordering samples
     comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
     comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
     comb_stats_df['well_id'] = well_ordering(comb_stats_df['well_id'])
     # comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
+    
+    # multiallelics bands
+    comb_stats_df['ma_band'] = '0'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 0, 'ma_band'] = '1-2'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 2, 'ma_band'] = '3-4'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 4, 'ma_band'] = '5+'
+
+    # mark low coverage samples
+    comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].astype(str)
+    comb_stats_df.loc[
+        comb_stats_df['mosq_reads'] < locov_rc,
+        'mosq_targets_recovered'
+    ] = comb_stats_df['mosq_targets_recovered'] + '*'
+
+    return comb_stats_df
+
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, run_id, plasm_assignment_df, plasm_colors, args):
+    
+    logging.info(f'generating {level_label} level plots')
+    #Generate bar plots at given assignment level
     #add samples with <10 targets
     nn_level_result_df = pd.concat([
         nn_level_result_df, pd.DataFrame(
@@ -435,11 +452,6 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
             )
         ]).fillna(0)
 
-    # multiallelics bands
-    comb_stats_df['ma_band'] = '0'
-    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 0, 'ma_band'] = '1-2'
-    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 2, 'ma_band'] = '3-4'
-    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 4, 'ma_band'] = '5+'
     # multiallelics color scheme - applied to top ticks 
     ma_colors = {
         '0':'#808080',
@@ -447,13 +459,6 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         '3-4':'#cc00FF',
         '5+':'#FF0000'
     }
-
-    # mark low coverage samples
-    comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].astype(str)
-    comb_stats_df.loc[
-        comb_stats_df['mosq_reads'] < args.locov_rc,
-        'mosq_targets_recovered'
-    ] = comb_stats_df['mosq_targets_recovered'] + '*'
 
     # plasm color scheme - applied to bottom ticks
     if plasm_assignment_df is not None and plasm_colors is not None:
@@ -481,7 +486,6 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         axs = [axs]
     for plate, ax in zip(plates, axs):
         plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().sort_values('well_id').reset_index()
-
         plot_samples = plot_df['sample_id']
         # plot nn proportions for plate
         nn_level_result_plot_df = nn_level_result_df.loc[plot_samples]
@@ -717,6 +721,8 @@ def nn(args):
             plasm_df = None
             plasm_colors = None
 
+        comb_stats_df = prep_stats_for_plotting(comb_stats_df, args.locov_rc)
+        
         for level in ['coarse', 'int', 'fine']:
             fig_fn = f'{args.outdir}/{level}_assignment.png'
             if args.resume and os.path.isfile(fig_fn):
