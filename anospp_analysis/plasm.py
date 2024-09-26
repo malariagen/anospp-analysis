@@ -6,29 +6,6 @@ import subprocess
 from anospp_analysis.util import *
 from anospp_analysis.iplot import plot_plate_view
 
-BLAST_COLS = 'qseqid sseqid slen qstart qend length mismatch gapopen gaps sseq pident evalue bitscore qcovs'
-
-SUM_HAP_COLS = [
-        'sample_id',
-        'target',
-        'reads',
-        'total_reads',
-        'reads_fraction',
-        'nalleles',
-        'seqid',
-        'sample_name',
-        'contamination_status',
-        'contamination_confidence',
-        'sseqid',
-        'pident',
-        'qcovs',
-        'species_assignment',
-        'hap_seqid',
-        'plate_id',
-        'well_id',
-        'consensus'
-    ]
-
 def run_blast(plasm_hap_df, outdir, blastdb, min_pident, min_qcov):
 
     logging.info('running blast')
@@ -41,11 +18,12 @@ def run_blast(plasm_hap_df, outdir, blastdb, min_pident, min_qcov):
             output.write(f"{row['consensus']}\n")
 
     # Run blast and capture the output
+    blast_cols = 'qseqid sseqid slen qstart qend length mismatch gapopen gaps sseq pident evalue bitscore qcovs'
     cmd = (
         f"blastn -db {blastdb} "
         f"-query {outdir}/plasm_haps.fasta "
         f"-out {outdir}/plasm_blastout.tsv "
-        f"-outfmt '6 {BLAST_COLS}' "
+        f"-outfmt '6 {blast_cols}' "
         f"-word_size 5 -max_target_seqs 1 -evalue 0.01"
         )
     process = subprocess.run(cmd, capture_output=True, text=True, shell=True)
@@ -94,7 +72,7 @@ def run_blast(plasm_hap_df, outdir, blastdb, min_pident, min_qcov):
 
     return blast_df
 
-def estimate_contamination(hap_df, sample_df, min_samples, min_source_reads, max_affected_reads):
+def estimate_contamination(hap_df, comb_stats_df, min_samples, min_source_reads, max_affected_reads):
     """
     Identify potential contamination from excessive haplotype sharing between
     high coverage sample (source) and many low coverage samples (affected).
@@ -105,7 +83,7 @@ def estimate_contamination(hap_df, sample_df, min_samples, min_source_reads, max
     logging.info('estimating cross-contamination')
 
     hap_df = hap_df[['sample_id', 'seqid', 'reads']]
-    ext_hap_df = pd.merge(hap_df, sample_df, on='sample_id', how='left')
+    ext_hap_df = pd.merge(hap_df, comb_stats_df, on='sample_id', how='left')
 
     assert ~ext_hap_df['well_id'].isna().any(), 'failed to get well IDs'
     assert ~ext_hap_df['plate_id'].isna().any(), 'failed to get plate IDs'
@@ -150,15 +128,34 @@ def summarise_haplotypes(hap_df, blast_df, contam_df):
     sum_hap_df = pd.merge(hap_df, contam_df, how='left') # multiple columns to be merged
     sum_hap_df = pd.merge(sum_hap_df, blast_df, left_on='seqid', right_on='qseqid')
 
-    sum_hap_df = sum_hap_df[SUM_HAP_COLS]
+    sum_hap_df = sum_hap_df[[
+        'sample_id',
+        'target',
+        'reads',
+        'total_reads',
+        'reads_fraction',
+        'nalleles',
+        'seqid',
+        'sample_name',
+        'contamination_status',
+        'contamination_confidence',
+        'sseqid',
+        'pident',
+        'qcovs',
+        'species_assignment',
+        'hap_seqid',
+        'plate_id',
+        'well_id',
+        'consensus'
+    ]]
 
     return sum_hap_df
 
-def summarise_samples(sum_hap_df, samples_df, filters=(10,10)):
+def summarise_samples(sum_hap_df, comb_stats_df, filters=(10,10)):
 
     logging.info('summarising sample info')
 
-    sum_samples_df = samples_df[[
+    sum_samples_df = comb_stats_df[[
         'sample_id',
         'sample_name',
         'lims_plate_id',
@@ -262,7 +259,7 @@ def plasm(args):
 
     logging.info('ANOSPP plasm data import started')
     hap_df = prep_hap(args.haplotypes)
-    run_id, samples_df = prep_samples(args.manifest)
+    run_id, comb_stats_df = prep_comb_stats(args.stats)
 
     plasm_hap_df = hap_df[hap_df['target'].isin(PLASM_TARGETS)].copy()
     
@@ -280,7 +277,7 @@ def plasm(args):
             )
 
         contam_df = estimate_contamination(
-            plasm_hap_df, samples_df,
+            plasm_hap_df, comb_stats_df,
             min_samples=args.contam_min_samples_affected, 
             min_source_reads=args.contam_min_reads_source, 
             max_affected_reads=args.contam_max_reads_affected
@@ -294,7 +291,7 @@ def plasm(args):
 
     sum_hap_df.to_csv(f'{args.outdir}/plasm_hap_summary.tsv', sep='\t', index=False)
 
-    sum_samples_df = summarise_samples(sum_hap_df, samples_df, filters=(args.filter_p1, args.filter_p2))
+    sum_samples_df = summarise_samples(sum_hap_df, comb_stats_df, filters=(args.filter_p1, args.filter_p2))
 
     sum_samples_df['plasm_ref'] = args.reference_version
 
@@ -330,8 +327,8 @@ def plasm(args):
 def main():
 
     parser = argparse.ArgumentParser("Plasmodium ID assignment for ANOSPP data")
-    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
-    parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
+    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file generated by prep', required=True)
+    parser.add_argument('-s', '--stats', help='Comb stats tsv file generated by prep', required=True)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='plasm')
     parser.add_argument('-p', '--path_to_refversion', 
                         help='Path to reference index version. Default: ref_databases', 
