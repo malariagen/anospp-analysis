@@ -8,18 +8,6 @@ import itertools
 
 from anospp_analysis.util import *
 
-def recompute_haplotype_coverage(hap_df):
-    hap_df = hap_df.drop(['total_reads', 'reads_fraction', 'nalleles'], axis=1)
-
-    hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
-            ['reads'].transform('sum')
-
-    hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
-
-    hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
-            ['consensus'].transform('nunique')
-    return hap_df
-
 def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     '''
     prepare mosquito haplotype dataframe
@@ -91,6 +79,8 @@ def prep_reference_index(reference_version, path_to_refversion):
                 sgp.append(line.strip())
 
         ref_hap_df[f'{level}_sgp'] = pd.Categorical(ref_hap_df[f'{level}_sgp'], sgp, ordered=True)
+        assert ~ref_hap_df[f'{level}_sgp'].isna().any(), \
+            f'reference version {reference_version} at {reference_path} has inconsistent labels between haplotypes.tsv and sgp_{level}.txt'
 
         if not os.path.isfile(f'{reference_path}/colors_{level}.npy'):
             logging.warning('No colors defined for plotting.')
@@ -203,6 +193,18 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
 
     return error_seqs
 
+def recompute_haplotype_coverage(hap_df):
+    hap_df = hap_df.drop(['total_reads', 'reads_fraction', 'nalleles'], axis=1)
+
+    hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['reads'].transform('sum')
+
+    hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
+
+    hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['consensus'].transform('nunique')
+    return hap_df
+
 def compute_kmer_distance(kmers, ref_kmers, tgt, qidx, refidx):
     '''
     compute k-mer distance between query kmer count
@@ -255,6 +257,31 @@ def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, weigh
     #normalise proportion and weigth in number of alleles
     assignment_proportion = weight * summed_af_nn / np.sum(summed_af_nn)
     return assignment_proportion
+
+def add_nn_to_haplotypes(non_error_hap_df, nndict, ref_hap_df):
+
+    def get_unique_sgps(x, level, ref_spp):
+        seqids = x.split(';')
+        match_sgps = ref_spp.loc[seqids, f'{level}_sgp'].transform(set)
+        sgps = set().union(*match_sgps)# - set([np.nan])
+        if len(sgps) == 0:
+            return ''
+        return ';'.join(sgps)
+
+    logging.info('adding NN annotations to non-error haplotypes')
+
+    non_error_hap_df['ref_nn_dist'] = non_error_hap_df['seqid'].apply(lambda x: nndict[x][1])
+    non_error_hap_df['ref_nn_seqids'] = non_error_hap_df['seqid'].apply(
+        lambda x: ";".join([x.split('-')[0] + '-' + str(y) for y in nndict[x][0]])
+    )
+
+    ref_spp = ref_hap_df.groupby('seqid')[['fine_sgp','int_sgp','coarse_sgp']].agg(set)
+
+    non_error_hap_df['ref_coarse_sgps'] = non_error_hap_df['ref_nn_seqids'].apply(lambda x: get_unique_sgps(x, 'coarse', ref_spp))
+    non_error_hap_df['ref_int_sgps'] = non_error_hap_df['ref_nn_seqids'].apply(lambda x: get_unique_sgps(x, 'int', ref_spp))
+    non_error_hap_df['ref_fine_sgps'] = non_error_hap_df['ref_nn_seqids'].apply(lambda x: get_unique_sgps(x, 'fine', ref_spp))
+    
+    return non_error_hap_df
 
 def perform_nn_assignment_samples(hap_df, ref_hap_df, nndict, allele_freqs, normalisation):
     '''
@@ -616,12 +643,9 @@ def nn(args):
         path_to_refversion=args.path_to_refversion
         )
         
-    non_error_hap_fn = f'{args.outdir}/non_error_haplotypes.tsv'
+    nn_hap_fn = f'{args.outdir}/nn_hap_summary.tsv'
     nndict_fn = f'{args.outdir}/nn_dist_to_ref.tsv'
-    if args.resume and os.path.isfile(non_error_hap_fn) and os.path.isfile(nndict_fn):
-        logging.warning(f'reading non error haplotype data from {non_error_hap_fn}')
-        non_error_hap_df = pd.read_csv(non_error_hap_fn, sep='\t')
-
+    if args.resume and os.path.isfile(nndict_fn):
         logging.warning(f'reading nndict from {nndict_fn}')
         nndict = {}
         with open(nndict_fn) as f:
@@ -630,6 +654,10 @@ def nn(args):
                 ll = line.strip().split('\t')
                 if len(ll) == 3:
                     nndict[ll[0]] = ([int(i) for i in ll[1].split('|')], float(ll[2]))
+        
+    if args.resume and os.path.isfile(nn_hap_fn):
+        logging.warning(f'reading annotated haplotype data from {nn_hap_fn}')
+        non_error_hap_df = pd.read_csv(nn_hap_fn, sep='\t')
     else:
         kmers = construct_unique_kmer_table(mosq_hap_df, args.kmer_length, source='samples')
         ref_kmers = construct_unique_kmer_table(ref_hap_df, args.kmer_length, source=args.reference_version)
@@ -637,26 +665,19 @@ def nn(args):
         error_seqs = identify_error_seqs(mosq_hap_df, kmers, args.kmer_length, args.n_error_snps)
         non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
         non_error_hap_df = recompute_haplotype_coverage(non_error_hap_df)
-        non_error_hap_df[[
-            'sample_id',
-            'target',
-            'consensus',
-            'reads',
-            'seqid',
-            'total_reads',
-            'reads_fraction',
-            'nalleles'
-        ]].to_csv(non_error_hap_fn, index=False, sep='\t')
-
-        nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
-        nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
-        nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
-        nn_df.index.name = 'seqid'
-        nn_df[['nn_id', 'nn_dist']].to_csv(
-            nndict_fn, 
-            sep='\t',
-            index=True
-            )
+        
+        if not args.resume or not os.path.isfile(nndict_fn):
+            nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
+            nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
+            nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
+            nn_df.index.name = 'seqid'
+            nn_df[['nn_id', 'nn_dist']].to_csv(
+                nndict_fn, 
+                sep='\t',
+                index=True
+                )
+        nn_hap_df = add_nn_to_haplotypes(non_error_hap_df, nndict, ref_hap_df)
+        nn_hap_df.to_csv(nn_hap_fn, index=False, sep='\t')
 
     nn_assignment_fn = f'{args.outdir}/nn_assignment.tsv'
     if args.resume and os.path.isfile(nn_assignment_fn):
