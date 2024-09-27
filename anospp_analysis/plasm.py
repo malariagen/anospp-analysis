@@ -34,7 +34,7 @@ def run_blast(plasm_hap_df, outdir, blastdb, min_pident, min_qcov):
         logging.error(f"Command error: {process.stderr}")
         sys.exit(1)
 
-    blast_df = pd.read_csv(f'{outdir}/plasm_blastout.tsv', sep='\t', names=BLAST_COLS.split())
+    blast_df = pd.read_csv(f'{outdir}/plasm_blastout.tsv', sep='\t', names=blast_cols.split())
 
     # not handling multiple blast hits for now
     multi_hits = blast_df.qseqid.duplicated()
