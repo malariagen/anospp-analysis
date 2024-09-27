@@ -452,24 +452,7 @@ def generate_summary(comb_stats_df, version_name):
 
 def prep_stats_for_plotting(comb_stats_df, locov_rc):
 
-    #Get row and col info from well_id for ordering samples
-    comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
-    comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
-    comb_stats_df['well_id'] = well_ordering(comb_stats_df['well_id'])
-    # comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
     
-    # multiallelics bands
-    comb_stats_df['ma_band'] = '0'
-    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 0, 'ma_band'] = '1-2'
-    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 2, 'ma_band'] = '3-4'
-    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 4, 'ma_band'] = '5+'
-
-    # mark low coverage samples
-    comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].astype(str)
-    comb_stats_df.loc[
-        comb_stats_df['mosq_reads'] < locov_rc,
-        'mosq_targets_recovered'
-    ] = comb_stats_df['mosq_targets_recovered'] + '*'
 
     return comb_stats_df
 
@@ -485,6 +468,26 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
                 ]
             )
         ]).fillna(0)
+
+    #Get row and col info from well_id for ordering samples
+    comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
+    comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
+    comb_stats_df['well_id'] = well_ordering(comb_stats_df['well_id'])
+    # comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
+    
+    # multiallelics bands
+    comb_stats_df['ma_band'] = '0'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 0, 'ma_band'] = '1-2'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 2, 'ma_band'] = '3-4'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 4, 'ma_band'] = '5+'
+
+    # mark low coverage samples - this can only be done once
+    if comb_stats_df['mosq_targets_recovered'].dtype.kind in 'biufc':
+        comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].astype(str)
+        comb_stats_df.loc[
+            comb_stats_df['mosq_reads'] < args.locov_rc,
+            'mosq_targets_recovered'
+        ] = comb_stats_df['mosq_targets_recovered'] + '*'
 
     # multiallelics color scheme - applied to top ticks 
     ma_colors = {
@@ -745,8 +748,6 @@ def nn(args):
         else:
             plasm_df = None
             plasm_colors = None
-
-        comb_stats_df = prep_stats_for_plotting(comb_stats_df, args.locov_rc)
         
         for level in ['coarse', 'int', 'fine']:
             fig_fn = f'{args.outdir}/{level}_assignment.png'
