@@ -459,6 +459,13 @@ def prep_stats_for_plotting(comb_stats_df, locov_rc):
 def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, run_id, plasm_assignment_df, plasm_colors, args):
     
     logging.info(f'generating {level_label} level plots')
+
+    assert nn_level_result_df.index.isin(comb_stats_df['sample_id']).all(), \
+        f'NN {level_label} samples do not match comb stats'
+    
+    assert nn_level_result_df.index.is_unique, \
+        f'NN {level_label} samples are not unique'
+
     #Generate bar plots at given assignment level
     #add samples with <10 targets
     nn_level_result_df = pd.concat([
@@ -475,19 +482,22 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     comb_stats_df['well_id'] = well_ordering(comb_stats_df['well_id'])
     # comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
     
+    # ma bands rely on multiallelics being numeric
+    comb_stats_df['multiallelic_mosq_targets'] = comb_stats_df['multiallelic_mosq_targets'].fillna(0).astype(int)
     # multiallelics bands
     comb_stats_df['ma_band'] = '0'
     comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 0, 'ma_band'] = '1-2'
     comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 2, 'ma_band'] = '3-4'
     comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 4, 'ma_band'] = '5+'
 
+    # locov relies on mosq_reads being numeric
+    comb_stats_df['mosq_reads'] = comb_stats_df['mosq_reads'].fillna(0).astype(int)
     # mark low coverage samples - this can only be done once
-    if comb_stats_df['mosq_targets_recovered'].dtype.kind in 'biufc':
-        comb_stats_df['mosq_targets_recovered'] = comb_stats_df['mosq_targets_recovered'].astype(str)
-        comb_stats_df.loc[
-            comb_stats_df['mosq_reads'] < args.locov_rc,
-            'mosq_targets_recovered'
-        ] = comb_stats_df['mosq_targets_recovered'] + '*'
+    comb_stats_df['mosq_targets_plot'] = comb_stats_df['mosq_targets_recovered'].astype(str)
+    comb_stats_df.loc[
+        comb_stats_df['mosq_reads'] < args.locov_rc,
+        'mosq_targets_plot'
+    ] = comb_stats_df['mosq_targets_plot'] + '*'
 
     # multiallelics color scheme - applied to top ticks 
     ma_colors = {
@@ -518,12 +528,12 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     # plot
     plates = comb_stats_df.plate_id.unique()
     nplates = comb_stats_df.plate_id.nunique()
-    fig, axs = plt.subplots(nplates, 1, figsize=(20, 4 * nplates))
+    fig, axs = plt.subplots(nplates, 1, figsize=(20, 4 * nplates + 1))
     if nplates == 1:
         axs = [axs]
     for plate, ax in zip(plates, axs):
         plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().sort_values('well_id').reset_index()
-        plot_samples = plot_df['sample_id']
+        plot_samples = plot_df['sample_id'] # TODO does not work for duplicated sample IDs
         # plot nn proportions for plate
         nn_level_result_plot_df = nn_level_result_df.loc[plot_samples]
         # TODO remove all-zero columns to speed up plotting - color index->label
@@ -562,7 +572,7 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         # top ticks - targets coloured by multiallelics band
         ax2 = ax.twiny()
         ax2.set_xticks(range(plot_df.shape[0]))
-        ax2.set_xticklabels(plot_df['mosq_targets_recovered'])
+        ax2.set_xticklabels(plot_df['mosq_targets_plot'])
         for i, r in plot_df.iterrows():
             ax2.get_xticklabels()[i].set_color(ma_colors[r.ma_band])
         ax2.tick_params(axis='x', rotation=90)
