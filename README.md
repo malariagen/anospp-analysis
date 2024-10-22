@@ -23,6 +23,7 @@ Key analysis steps are implemented as standalone scripts:
 - `anospp-plasm` blasts Plasmodium sequences against reference dataset to determine species and infer sample infection status
 - `anospp-nn` compares k-mer profiles of mosquito targets against a reference dataset and provides probabilistic species calls
 - `anospp-vae` provides finer scale species prediction for An. gambiae complex with VAE projection
+- `anospp-agg` combines all results into a single table
 
 ## Development
 
