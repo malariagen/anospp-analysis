@@ -255,9 +255,22 @@ def summarise_samples(sum_hap_df, comb_stats_df, filters=(10,10)):
 
     def consensus_species(sum_samples_row, targets=PLASM_TARGETS):
 
+        # no consensus species for statuses not considered positive
+        nocall_statuses = (
+            'contamination_only', 
+            'P1_only', 
+            'P2_only', 
+            'not_detected'
+            )
+        if sum_samples_row['plasmodium_detection_status'] in nocall_statuses:
+            return ''
+
         spp = set()
         for t in targets:
-            tsp = set(sum_samples_row[f'{t}_species_assignments_pass'].split(';')) - set([''])
+            tsp = set(sum_samples_row[f'{t}_species_assignments_pass'].split(';'))
+            # locov only included when pass of same species is present, skip
+            # tsp = tsp.union(set(sum_samples_row[f'{t}_species_assignments_locov'].split(';')))
+            tsp = tsp - set([''])
             spp = spp.union(tsp)
 
         return ';'.join(spp)
