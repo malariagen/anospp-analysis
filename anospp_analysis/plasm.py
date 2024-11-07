@@ -208,28 +208,41 @@ def summarise_samples(sum_hap_df, comb_stats_df, filters=(10,10)):
         sum_samples_df[f'{t}_hapids_locov'] = sum_samples_df[f'{t}_hapids_locov'].fillna('')
         sum_samples_df[f'{t}_hapids_locov_reads'] = t_locov_hap_gbs.agg({'reads_str': ';'.join})
         sum_samples_df[f'{t}_hapids_locov_reads'] = sum_samples_df[f'{t}_hapids_locov_reads'].fillna('')
+        sum_samples_df[f'{t}_species_assignments_locov'] = t_locov_hap_gbs.agg(
+            {'species_assignment': ';'.join}
+            )
+        sum_samples_df[f'{t}_species_assignments_locov'] = sum_samples_df[f'{t}_species_assignments_locov'].fillna('')
+        
 
     def infer_status(sum_samples_row, targets=PLASM_TARGETS):
         # not generalised
-        p1_spp = set(sum_samples_row['P1_species_assignments_pass'].split(';')) - set([''])
-        p2_spp = set(sum_samples_row['P2_species_assignments_pass'].split(';')) - set([''])
+        p1_spp_pass = set(sum_samples_row['P1_species_assignments_pass'].split(';')) - set([''])
+        p2_spp_pass = set(sum_samples_row['P2_species_assignments_pass'].split(';')) - set([''])
+        p1_spp_locov = set(sum_samples_row['P1_species_assignments_locov'].split(';')) - set([''])
+        p2_spp_locov = set(sum_samples_row['P2_species_assignments_locov'].split(';')) - set([''])
         is_contam = (
             (len(sum_samples_row['P1_hapids_contam']) > 0) |
             (len(sum_samples_row['P2_hapids_contam']) > 0)
         )
-        if len(p1_spp) > 0:
-            if len(p2_spp) > 0:
-                if p1_spp == p2_spp:
+        if len(p1_spp_pass) > 0:
+            if len(p2_spp_pass) > 0:
+                if p1_spp_pass == p1_spp_pass:
                     status = 'species_consistent'
-                elif p1_spp - p2_spp == set():
+                elif p1_spp_pass - p1_spp_pass == set():
                     status = 'extra_species_in_P2'
-                elif p2_spp - p1_spp == set():
+                elif p1_spp_pass - p1_spp_pass == set():
                     status = 'extra_species_in_P1'
                 else:
                     status = 'species_discordant'
             else:
-                status = 'P1_only'
-        elif len(p2_spp) > 0:
+                # species consistent even if P2 does not pass coverage filter
+                if p1_spp_pass == p2_spp_locov:
+                    status = 'species_consistent_P2_locov'
+                else:
+                    status = 'P1_only'
+        elif len(p2_spp_pass) > 0:
+            if p1_spp_locov == p2_spp_pass:
+                status = 'species_consistent_P1_locov'
             status = 'P2_only'
         elif is_contam:
             status = 'contamination_only'
