@@ -107,13 +107,15 @@ def get_hap_df(dada_table, work_dir, rc=False):
         rc_deplex_df = get_deplex_df(work_dir + '_rc')
         assert deplex_df.shape[0] == rc_deplex_df.shape[0], \
             'mismatch in deplex and reverse complement sequences number'
+        n_rc = 0
         for seqid, r in deplex_df.iterrows():
             rc_seqid = f'{seqid}_rc'
             rc_r = rc_deplex_df.loc[rc_seqid]
             if (r.target == 'unknown') and (rc_r.target != 'unknown'):
-                logging.info(f'using rc sequence for {seqid}')
+                n_rc += 1
                 for col in ('trimmed_sequence', 'target'):
                     deplex_df.loc[seqid, col] = rc_r[col]
+        logging.info('added {n_rc} reverse complement sequences matching targets')
     dada_deplex_df = pd.merge(dada_df, deplex_df, left_index=True, right_index=True)
     dada_deplex_df.index.name = 'dada2_id'
     assert dada_deplex_df.shape[0] == dada_df.shape[0] == deplex_df.shape[0], \
