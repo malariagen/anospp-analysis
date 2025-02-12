@@ -115,7 +115,7 @@ def get_hap_df(dada_table, work_dir, rc=False):
                 n_rc += 1
                 for col in ('trimmed_sequence', 'target'):
                     deplex_df.loc[seqid, col] = rc_r[col]
-        logging.info('added {n_rc} reverse complement sequences matching targets')
+        logging.info(f'added {n_rc} reverse complement sequences matching targets')
     dada_deplex_df = pd.merge(dada_df, deplex_df, left_index=True, right_index=True)
     dada_deplex_df.index.name = 'dada2_id'
     assert dada_deplex_df.shape[0] == dada_df.shape[0] == deplex_df.shape[0], \
@@ -156,7 +156,7 @@ def get_hap_df(dada_table, work_dir, rc=False):
 
     return hap_df
 
-def prep_samples(samples_fn):
+def prep_samples(samples_fn, run_id=None):
     '''
     Prepare sample manifest used for anospp pipeline
     '''
@@ -177,15 +177,20 @@ def prep_samples(samples_fn):
         logging.info(f'preparing sample manifest from new style file {samples_fn}')
         samples_df = pd.read_csv(samples_fn, sep='\t', dtype='str')
         samples_df.rename(columns=({'derived_sample_id':'sample_id'}), inplace=True)
-        assert samples_df.irods_path.str.match('/seq/\d{5}/\d{5}_\d#\d+.cram').all(), \
-            ('tsv sample manifest input requires irods_path column to be present '
-             'and match "/seq/12345/12345_1#123.cram"')
-        samples_df['run_id'] = samples_df.irods_path.str.split('/').str.get(2)
-        samples_df[['lane_index', 'tag_index']] = samples_df.irods_path \
-            .str.split('/').str.get(3) \
-            .str.split('_').str.get(1) \
-            .str.split('.').str.get(0) \
-            .str.split('#', expand=True)
+        if run_id is not None:
+            samples_df['run_id'] = run_id
+            samples_df['lane_index'] = 1
+            samples_df['tag_index'] = [i + 1 for i in range(len(samples_df))]
+        else:
+            assert samples_df.irods_path.str.match('/seq/\d{5}/\d{5}_\d#\d+.cram').all(), \
+                ('tsv sample manifest input requires irods_path column to be present '
+                'and match "/seq/12345/12345_1#123.cram"')
+            samples_df['run_id'] = samples_df.irods_path.str.split('/').str.get(2)
+            samples_df[['lane_index', 'tag_index']] = samples_df.irods_path \
+                .str.split('/').str.get(3) \
+                .str.split('_').str.get(1) \
+                .str.split('.').str.get(0) \
+                .str.split('#', expand=True)
     else:
         raise ValueError(f'Expected {samples_fn} to be in either tsv or csv format')    
 
@@ -435,7 +440,7 @@ def prep_dada2(args):
     logging.info('Combining DADA2 stats with prep stats')
 
     hap_df = prep_hap(hap_fn)
-    run_id, samples_df = prep_samples(args.manifest)
+    run_id, samples_df = prep_samples(args.manifest, args.run_id)
     stats_df = prep_stats(args.stats)
 
     comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
@@ -456,13 +461,18 @@ def main():
                         help='adapters fasta file for deplexing with cutadapt', 
                         required=True)
     parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
-    parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-s', '--stats', 
+                        help='ampliseq overall_summary.tsv file or DADA2_stats.tsv file', required=True)
     parser.add_argument('-o', '--outdir', 
                         help='output directory for haplotypes and stats tsv files. Default: prep', 
                         default='prep')
     parser.add_argument('-w', '--work_dir', 
                         help='working directory for intermediate files. Default: work',
                         default='work')
+    parser.add_argument('-i', '--run_id',
+                        help=('use this run_id and sample order to infer run, lane and tag instead of `irods_path` column.' 
+                              'Default: do not override'),
+                        default=None)
     parser.add_argument('-r', '--rc', 
                         help=('Also run deplexing on reverse complement ASVs, '
                               'useful when amplicon orientation is not known'), 
