@@ -444,9 +444,9 @@ def generate_summary(comb_stats_df, version_name):
         f'{(~comb_stats_df.nn_fine.isnull()).sum()} samples are assigned at fine level',
         f'to {comb_stats_df.nn_fine.nunique()} different species groups',
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_int", "sample_id"].nunique()} '
-        f'samples with sufficient coverage could not be assigned at intermediate level',
+        f'samples with sufficient coverage could not be assigned at fine level',
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_coarse", "sample_id"].nunique()} '
-        f'samples with sufficient coverage could not be assigned at coarse level',
+        f'samples with sufficient coverage could not be assigned at intermediate level',
     ]
     return '\n'.join(summary)
 
