@@ -34,6 +34,7 @@ Installation is hybrid with conda + poetry:
 ```bash
 git clone git@github.com:malariagen/anospp-analysis.git
 cd anospp-analysis
+git checkout dev
 conda env create -f environment.yml
 conda activate anospp_analysis_dev
 poetry install
