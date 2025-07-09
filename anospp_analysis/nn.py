@@ -8,6 +8,7 @@ import argparse
 import itertools
 
 from anospp_analysis.util import *
+from anospp_analysis.qc import plot_het_cov
 
 def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     '''
@@ -751,6 +752,9 @@ def nn(args):
         fn.write(summary_text)
 
     if not args.no_plotting:
+
+        fig, _, _, _ = plot_het_cov(non_error_hap_df, title='Mosquito filtered', run_id=run_id)
+        fig.savefig(f'{args.outdir}/het_cov.png')
 
         if args.plasm_assignment is not None and args.plasm_colors is not None:
             plasm_df = pd.read_csv(args.plasm_assignment, sep='\t')
