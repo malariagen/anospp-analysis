@@ -8,8 +8,8 @@ def validate_aggregation(comb_df):
     logging.info('checking data types')
 
     for col in [
-        'sample_id', 'irods_path', 'id_library_lims', 'id_study_lims',
-        'sanger_sample_id', 'run_id', 'lane_index', 'tag_index', 'plate_id',
+        'sample_id', #'irods_path', 'id_library_lims', 'id_study_lims', 'sanger_sample_id', 'front_barcode', 'rear_barcode'
+        'run_id', 'lane_index', 'tag_index', 'plate_id',
         'well_id', 'lims_plate_id', 'lims_well_id', 'sample_name',
         'total_reads', 'readthrough_pass_reads', 'dada2_input_reads',
         'dada2_filtered_reads', 'dada2_denoised_reads', 'dada2_merged_reads',
