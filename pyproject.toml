@@ -12,11 +12,12 @@ python = "^3.10,<3.11"
 pandas = "*"
 numpy = "*"
 seaborn = "*"
-BioPython = "*"
+scipy = "*"
 cutadapt = "*"
 keras = "^2.12"
 tensorflow = "^2.12"
 bokeh = "*"
+pyarrow = "*"
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "*"

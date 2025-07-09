@@ -3,22 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import os
+import re
 import argparse
 import itertools
 
 from anospp_analysis.util import *
-
-def recompute_haplotype_coverage(hap_df):
-    hap_df = hap_df.drop(['total_reads', 'reads_fraction', 'nalleles'], axis=1)
-
-    hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
-            ['reads'].transform('sum')
-
-    hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
-
-    hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
-            ['consensus'].transform('nunique')
-    return hap_df
+from anospp_analysis.qc import plot_het_cov
 
 def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
     '''
@@ -39,6 +29,7 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
             f'removed {hap_df.shape[0] - filtered_hap_df.shape[0]} haplotypes '
             f'with fewer than {rc_threshold} reads or fraction lower than {rf_threshold} of reads'
         )
+    assert filtered_hap_df.shape[0] > 0, 'No haplotypes left after filtering, terminating'
     mosq_hap_df = filtered_hap_df[filtered_hap_df.target.isin(MOSQ_TARGETS)]
     mosq_hap_df = mosq_hap_df.astype({'target': int})
 
@@ -47,14 +38,18 @@ def prep_mosquito_haps(hap_df, rc_threshold, rf_threshold):
 
     return mosq_hap_df
 
-def prep_reference_index(reference_version, path_to_refversion):
+def prep_reference_index(reference_path):
     '''
     Read in standardised reference index files from database (currently directory)
     '''
 
-    logging.info(f'importing reference index {reference_version}')
+    logging.info(f'importing reference index from {reference_path}')
 
-    reference_path = f'{path_to_refversion}/{reference_version}/'
+    reference_path = reference_path.rstrip('/')
+
+    reference_version = reference_path.split('/')[-1]
+
+    assert re.match(r'^nnv\d', reference_version), f'{reference_version} not recognised as NN ref version'
 
     assert os.path.isdir(reference_path), f'reference version {reference_version} does not exist at {reference_path}'
 
@@ -73,6 +68,8 @@ def prep_reference_index(reference_version, path_to_refversion):
     else:
         logging.warning('No version.txt file present for reference version {reference_version} at {reference_path}')
         version_name = 'unknown'
+    if version_name != reference_version:
+        logging.warning(f'Reference directory name {reference_version} does not match version.txt: {version_name}')
 
     allele_freqs = dict()
     colors = dict()
@@ -90,6 +87,8 @@ def prep_reference_index(reference_version, path_to_refversion):
                 sgp.append(line.strip())
 
         ref_hap_df[f'{level}_sgp'] = pd.Categorical(ref_hap_df[f'{level}_sgp'], sgp, ordered=True)
+        assert ~ref_hap_df[f'{level}_sgp'].isna().any(), \
+            f'reference version {reference_version} at {reference_path} has inconsistent labels between haplotypes.tsv and sgp_{level}.txt'
 
         if not os.path.isfile(f'{reference_path}/colors_{level}.npy'):
             logging.warning('No colors defined for plotting.')
@@ -130,6 +129,7 @@ def parse_seqids_series(seqids):
     Parse seqid or seqids passed as a pandas Series
     '''
     parsed_seqids = seqids.str.split('-', expand=True)
+    # assert parsed_seqids.shape[1] == 2, 'Failed to parse seqids, we expected only one "-" in each seqid'
     parsed_seqids.columns = ['target', 'uidx']
     
     assert parsed_seqids['target'].isin(MOSQ_TARGETS).all(), 'Dataframe contains seqids referring to non-mosquito targets'
@@ -139,7 +139,7 @@ def parse_seqids_series(seqids):
         raise Exception('Dataframe contains seqids which cannot be converted to integers')
     return parsed_seqids
 
-def construct_unique_kmer_table(mosq_hap_df, k):
+def construct_unique_kmer_table(mosq_hap_df, k, source):
     '''
     constructs a k-mer table of dimensions n_amp * maxallele * 4**k
     represting the k-mer table of each unique sequence in the dataframe
@@ -149,7 +149,7 @@ def construct_unique_kmer_table(mosq_hap_df, k):
     output: k-mer table representing each unique haplotype in the hap dataframe
     '''
 
-    logging.info('translating unique sequences to k-mers')
+    logging.info(f'translating unique sequences from {source} to {k}-mers')
 
     kmerdict = construct_kmer_dict(k)
     #subset to unique haplotypes
@@ -180,8 +180,8 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     #set the k-mer threshold for the number of snps allowed for errors
     threshold = n_error_snps * k + 1
     seqid_size = mosq_hap_df.groupby('seqid').size()
-    singleton_seqids = seqid_size[seqid_size == 1].index
-    error_candidates = mosq_hap_df.query('(seqid in @singleton_seqids) & (nalleles>2)')
+    singleton_seqids = seqid_size[seqid_size == 1].index # used in query
+    error_candidates = mosq_hap_df.query('(seqid in @singleton_seqids) & (nalleles > 2)')
 
     error_seqs = []
     for _, cand in error_candidates.iterrows():
@@ -200,6 +200,18 @@ def identify_error_seqs(mosq_hap_df, kmers, k, n_error_snps):
     logging.info(f'identified {len(error_seqs)} error sequences')
 
     return error_seqs
+
+def recompute_haplotype_coverage(hap_df):
+    hap_df = hap_df.drop(['total_reads', 'reads_fraction', 'nalleles'], axis=1)
+
+    hap_df['total_reads'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['reads'].transform('sum')
+
+    hap_df['reads_fraction'] = hap_df['reads'] / hap_df['total_reads']
+
+    hap_df['nalleles'] = hap_df.groupby(by=['sample_id', 'target']) \
+            ['consensus'].transform('nunique')
+    return hap_df
 
 def compute_kmer_distance(kmers, ref_kmers, tgt, qidx, refidx):
     '''
@@ -253,6 +265,31 @@ def lookup_assignment_proportion(q_seqid, allele_frequencies, tgt, nndict, weigh
     #normalise proportion and weigth in number of alleles
     assignment_proportion = weight * summed_af_nn / np.sum(summed_af_nn)
     return assignment_proportion
+
+def add_nn_to_haplotypes(non_error_hap_df, nndict, ref_hap_df):
+
+    def get_unique_sgps(x, level, ref_spp):
+        seqids = x.split(';')
+        match_sgps = ref_spp.loc[seqids, f'{level}_sgp'].transform(set)
+        sgps = set().union(*match_sgps)# - set([np.nan])
+        if len(sgps) == 0:
+            return ''
+        return ';'.join(sgps)
+
+    logging.info('adding NN annotations to non-error haplotypes')
+
+    non_error_hap_df['ref_nn_dist'] = non_error_hap_df['seqid'].apply(lambda x: nndict[x][1])
+    non_error_hap_df['ref_nn_seqids'] = non_error_hap_df['seqid'].apply(
+        lambda x: ";".join([x.split('-')[0] + '-' + str(y) for y in nndict[x][0]])
+    )
+
+    ref_spp = ref_hap_df.groupby('seqid')[['fine_sgp','int_sgp','coarse_sgp']].agg(set)
+
+    non_error_hap_df['ref_coarse_sgps'] = non_error_hap_df['ref_nn_seqids'].apply(lambda x: get_unique_sgps(x, 'coarse', ref_spp))
+    non_error_hap_df['ref_int_sgps'] = non_error_hap_df['ref_nn_seqids'].apply(lambda x: get_unique_sgps(x, 'int', ref_spp))
+    non_error_hap_df['ref_fine_sgps'] = non_error_hap_df['ref_nn_seqids'].apply(lambda x: get_unique_sgps(x, 'fine', ref_spp))
+    
+    return non_error_hap_df
 
 def perform_nn_assignment_samples(hap_df, ref_hap_df, nndict, allele_freqs, normalisation):
     '''
@@ -348,55 +385,8 @@ def recompute_sample_coverage(comb_stats_df, non_error_hap_df):
 
     return comb_stats_df
 
-def estimate_contamination(comb_stats_df, non_error_hap_df, true_multi_targets,
-                           rc_med_threshold, ma_med_threshold, ma_hi_threshold, ma_vh_threshold):
-    '''
-    estimate contamination from read counts and multiallelic targets
-    '''
-    logging.info('estimating contamination risk')
-
-    #Read in exceptions from true_multi_targets file
-    for idx, item in true_multi_targets.iterrows():
-        potentially_affected_samples = comb_stats_df.loc[comb_stats_df[f'nn_{item.level}'] == item.sgp, 'sample_id']
-        affected_samples = non_error_hap_df \
-            .query('(sample_id in @potentially_affected_samples) & (target == @item.target)') \
-            .groupby('sample_id') \
-            .filter(
-                lambda x: (x['seqid'].nunique() > 2) & (x['seqid'].nunique() <= item.admissable_alleles)
-                ) \
-            ['sample_id'].unique()
-        comb_stats_df.loc[comb_stats_df.sample_id.isin(affected_samples), 'multiallelic_mosq_targets'] -= 1
-
-    comb_stats_df['contamination_risk'] = 'low'
-    comb_stats_df.loc[
-        comb_stats_df.mosq_reads < rc_med_threshold,
-        'contamination_risk'
-    ] = 'medium'
-    comb_stats_df.loc[
-        comb_stats_df.multiallelic_mosq_targets > ma_med_threshold,
-        'contamination_risk'
-    ] = 'medium'
-    comb_stats_df.loc[
-        comb_stats_df.multiallelic_mosq_targets > ma_hi_threshold,
-        'contamination_risk'
-    ] = 'high'
-    comb_stats_df.loc[
-        comb_stats_df.multiallelic_mosq_targets > ma_vh_threshold,
-        'contamination_risk'
-    ] = 'very_high'
-
-    logging.info(
-        f'identified {(comb_stats_df.contamination_risk == "very_high").sum()} samples with very high contamination risk, '
-        f'{(comb_stats_df.contamination_risk == "high").sum()} samples with high contamination risk, '
-        f'{(comb_stats_df.contamination_risk == "medium").sum()} samples with medium contamination risk '
-        f'and {(comb_stats_df.contamination_risk == "low").sum()} samples with low contamination risk'
-        )
-
-    return comb_stats_df
-
 def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_dfs,
-                        true_multi_targets, nn_asgn_threshold,
-                        rc_med_threshold, ma_med_threshold, ma_hi_threshold, ma_vh_threshold):
+                        true_multi_targets, nn_asgn_threshold):
 
     logging.info('generating NN calls from assignment info')
 
@@ -415,16 +405,6 @@ def generate_hard_calls(comb_stats_df, non_error_hap_df, test_samples, results_d
                 lambda row: results_dfs[level].columns[row >= nn_asgn_threshold][0],
                 axis=1))
         comb_stats_df[f'nn_{level}'] = comb_stats_df.sample_id.map(asgn_dict)
-
-    comb_stats_df = estimate_contamination(
-        comb_stats_df,
-        non_error_hap_df,
-        true_multi_targets,
-        rc_med_threshold,
-        ma_med_threshold,
-        ma_hi_threshold,
-        ma_vh_threshold
-    )
 
     comb_stats_df['nn_species_call'] = None
     comb_stats_df['nn_call_method'] = None
@@ -457,10 +437,6 @@ def generate_summary(comb_stats_df, version_name):
     summary = [
         f'Nearest Neighbour assignment using reference version {version_name}',
         f'On run containing {comb_stats_df.sample_id.nunique()} samples',
-        f'{(comb_stats_df.contamination_risk == "very_high").sum()} samples have very high contamination risk',
-        f'{(comb_stats_df.contamination_risk == "high").sum()} samples have high contamination risk',
-        f'{(comb_stats_df.contamination_risk == "medium").sum()} samples have medium contamination risk',
-        f'{(comb_stats_df.contamination_risk == "low").sum()} samples have low contamination risk',
         f'{(comb_stats_df.nn_assignment=="no").sum()} samples with < 10 targets lack NN assignment',
         f'{(~comb_stats_df.nn_coarse.isnull()).sum()} samples are assigned at coarse level',
         f'to {comb_stats_df.nn_coarse.nunique()} different species groups',
@@ -469,26 +445,29 @@ def generate_summary(comb_stats_df, version_name):
         f'{(~comb_stats_df.nn_fine.isnull()).sum()} samples are assigned at fine level',
         f'to {comb_stats_df.nn_fine.nunique()} different species groups',
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_int", "sample_id"].nunique()} '
-         'samples with sufficient coverage could not be assigned at intermediate level',
-        f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_int") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
-         'of those have medium or higher contamination risk',
+        f'samples with sufficient coverage could not be assigned at fine level',
         f'{comb_stats_df.loc[comb_stats_df.nn_call_method == "NN_coarse", "sample_id"].nunique()} '
-         'samples with sufficient coverage could not be assigned at coarse level',
-        f'{comb_stats_df.loc[(comb_stats_df.nn_call_method == "NN_coarse") & (comb_stats_df.contamination_risk != "low"), "sample_id"].nunique()} '
-         'of those have medium or higher contamination risk'
+        f'samples with sufficient coverage could not be assigned at intermediate level',
     ]
     return '\n'.join(summary)
 
-def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, nn_asgn_threshold, run_id, 
-                                plasm_assignment_fn, plasm_colors_fn, read_count_threshold, legend_cutoff):
+def prep_stats_for_plotting(comb_stats_df, locov_rc):
+
+    
+
+    return comb_stats_df
+
+def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, level_colors, run_id, plasm_assignment_df, plasm_colors, args):
     
     logging.info(f'generating {level_label} level plots')
+
+    assert nn_level_result_df.index.isin(comb_stats_df['sample_id']).all(), \
+        f'NN {level_label} samples do not match comb stats'
+    
+    assert nn_level_result_df.index.is_unique, \
+        f'NN {level_label} samples are not unique'
+
     #Generate bar plots at given assignment level
-    #Get row and col info from well_id for ordering samples
-    comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
-    comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
-    comb_stats_df['well_id'] = well_ordering(comb_stats_df['well_id'])
-    # comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
     #add samples with <10 targets
     nn_level_result_df = pd.concat([
         nn_level_result_df, pd.DataFrame(
@@ -498,24 +477,45 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
             )
         ]).fillna(0)
 
-    # contamination color scheme - applied to top ticks 
-    contam_colors = {
-        'low':'#808080',
-        'medium':'#FF9900',
-        'high':'#cc00FF',
-        'very_high':'#FF0000'
+    #Get row and col info from well_id for ordering samples
+    comb_stats_df['row_id'] = comb_stats_df.well_id.str[0]
+    comb_stats_df['col_id'] = comb_stats_df.well_id.str[1:].astype(int)
+    comb_stats_df['well_id'] = well_ordering(comb_stats_df['well_id'])
+    # comb_stats_df.sort_values(by=['plate_id', 'col_id', 'well_id'], inplace=True)
+    
+    # ma bands rely on multiallelics being numeric
+    comb_stats_df['multiallelic_mosq_targets'] = comb_stats_df['multiallelic_mosq_targets'].fillna(0).astype(int)
+    # multiallelics bands
+    comb_stats_df['ma_band'] = '0'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 0, 'ma_band'] = '1-2'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 2, 'ma_band'] = '3-4'
+    comb_stats_df.loc[comb_stats_df['multiallelic_mosq_targets'] > 4, 'ma_band'] = '5+'
+
+    # locov relies on mosq_reads being numeric
+    comb_stats_df['mosq_reads'] = comb_stats_df['mosq_reads'].fillna(0).astype(int)
+    # mark low coverage samples - this can only be done once
+    comb_stats_df['mosq_targets_plot'] = comb_stats_df['mosq_targets_recovered'].astype(str)
+    comb_stats_df.loc[
+        comb_stats_df['mosq_reads'] < args.locov_rc,
+        'mosq_targets_plot'
+    ] = comb_stats_df['mosq_targets_plot'] + '*'
+
+    # multiallelics color scheme - applied to top ticks 
+    ma_colors = {
+        '0':'#808080',
+        '1-2':'#FF9900',
+        '3-4':'#cc00FF',
+        '5+':'#FF0000'
     }
 
     # plasm color scheme - applied to bottom ticks
-    if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+    if plasm_assignment_df is not None and plasm_colors is not None:
         logging.info(f'using plasm predictions to colour sample labels')
-        plasm_df = pd.read_csv(plasm_assignment_fn, sep='\t')
-        plasm_df['plasmodium_species'] = plasm_df['plasmodium_species'].fillna('')
-        plasm_spp = plasm_df.set_index('sample_id')['plasmodium_species'].to_dict()
+        plasm_assignment_df['plasmodium_species'] = plasm_assignment_df['plasmodium_species'].fillna('')
+        plasm_spp = plasm_assignment_df.set_index('sample_id')['plasmodium_species'].to_dict()
         assert set(plasm_spp.keys()) == set(comb_stats_df.sample_id), \
             'plasmodium assignment samples do not match nn samples'
 
-        plasm_colors = pd.read_csv(plasm_colors_fn).set_index('species')['color']
         # named species in legend - remove genus name
         plasm_legend_colors = {sp[11:]:color for sp, color in plasm_colors.iloc[:6].to_dict().items()}
         # other species collapsed
@@ -529,26 +529,34 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
     # plot
     plates = comb_stats_df.plate_id.unique()
     nplates = comb_stats_df.plate_id.nunique()
-    fig, axs = plt.subplots(nplates, 1, figsize=(20, 4 * nplates))
+    fig, axs = plt.subplots(nplates, 1, figsize=(20, 4 * nplates + 1))
     if nplates == 1:
         axs = [axs]
     for plate, ax in zip(plates, axs):
-        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().reset_index()
-        plot_df['well_id'] = well_ordering(plot_df['well_id'])
-        plot_samples = plot_df['sample_id']
-        nn_level_result_df.loc[plot_samples].plot(
-            kind='bar', stacked=True, width=1, ax=ax, color=level_colors
-        )
-        ax.axhline(nn_asgn_threshold, color='k', ls=':', linewidth=1)
+        plot_df = comb_stats_df[comb_stats_df.plate_id == plate].copy().sort_values('well_id').reset_index()
+        plot_samples = plot_df['sample_id'] # TODO does not work for duplicated sample IDs
+        # plot nn proportions for plate
+        nn_level_result_plot_df = nn_level_result_df.loc[plot_samples]
+        # TODO remove all-zero columns to speed up plotting - color index->label
+        nn_level_result_plot_df.plot(
+                kind='bar', stacked=True, width=1, ax=ax, color=level_colors
+                )
+        # remove zero size patches post-hoc
+        for patch in ax.patches[:]:  # Copy list of patches to avoid modifying while iterating
+            if isinstance(patch, mpatches.Rectangle):
+                if patch.get_width() == 0 or patch.get_height() == 0:
+                    patch.remove()
+        ax.axhline(args.nn_assignment_threshold, color='k', ls=':', linewidth=1)
         ax.set_ylim(0, 1)
         ax.set_yticks([])
         ax.set_ylabel(plate, fontsize=16)
         handles, labels = ax.get_legend_handles_labels()
         ax.get_legend().remove()
         
+        # bottom ticks - species name coloured by plasm
         ax.set_xticks(range(plot_df.shape[0]))
         ax.set_xticklabels(plot_df['sample_name'])
-        if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+        if plasm_assignment_df is not None and plasm_colors is not None:
             for i, r in plot_df.iterrows():
                 sample_plasm_sp = plasm_spp[r.sample_id]
                 # multiple species infection
@@ -562,47 +570,48 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
                     ax.get_xticklabels()[i].set_color('grey')
         ax.tick_params(axis='x', rotation=90)
         
+        # top ticks - targets coloured by multiallelics band
         ax2 = ax.twiny()
         ax2.set_xticks(range(plot_df.shape[0]))
-        ax2.set_xticklabels(plot_df['mosq_targets_recovered'])
+        ax2.set_xticklabels(plot_df['mosq_targets_plot'])
         for i, r in plot_df.iterrows():
-            ax2.get_xticklabels()[i].set_color(contam_colors[r.contamination_risk])
-            if r.mosq_reads < read_count_threshold:
-                ax2.get_xticklabels()[i].set_fontstyle('oblique')
+            ax2.get_xticklabels()[i].set_color(ma_colors[r.ma_band])
         ax2.tick_params(axis='x', rotation=90)
         ax2.set_xlim(ax.get_xlim())
     plt.tight_layout()
 
     # add legends after adjusting layout so that they span multiple subplots
-    contam_artist = axs[0].legend(
-        handles=[mpatches.Patch(color=color, label=label) for label, color in contam_colors.items()],
-        title='Total target count (top number) colored\nby contamination risk',
+    ma_artist = axs[0].legend(
+        handles=[mpatches.Patch(color=color, label=label) for label, color in ma_colors.items()],
+        title=f'Total target count (top number) colored\nby multiallelic targets (* locov, <{args.locov_rc} reads)',
         alignment='left',
+        loc='upper left',
         bbox_to_anchor=(1,1.1),
         fontsize=10,
         ncols=2
     )
-    axs[0].add_artist(contam_artist)
+    axs[0].add_artist(ma_artist)
 
-    if plasm_assignment_fn is not None and plasm_colors_fn is not None:
+    if plasm_assignment_df is not None and plasm_colors is not None:
         plasm_artist = axs[0].legend(
             handles=[mpatches.Patch(color=color, label=label) for label, color in plasm_legend_colors.items()],
             title='Specimen ID label (bottom) colored by\nPlasmodium species detected',
-            bbox_to_anchor=(1,0.725),
             alignment='left',
+            loc='upper left',
+            bbox_to_anchor=(1,0.725),
             fontsize=10,
             ncols=2
         )
         axs[0].add_artist(plasm_artist)
 
     # subset legend to values observed over the cutoff
-    if legend_cutoff > 0:
-        logging.info(f'subsetting legend to observed labels at min frequency {legend_cutoff}')
+    if args.legend_cutoff > 0:
+        logging.info(f'subsetting legend to observed labels at min frequency {args.legend_cutoff}')
     flt_handles = []
     flt_labels = []
     for handle, label in zip(handles, labels):
         max_freq = nn_level_result_df[label].max()
-        if max_freq >= legend_cutoff:
+        if max_freq >= args.legend_cutoff:
             flt_handles.append(handle)
             flt_labels.append(label)
     # consistent legend title
@@ -611,20 +620,20 @@ def plot_assignment_proportions(comb_stats_df, nn_level_result_df, level_label, 
         'int':'Intermediate',
         'fine':'Fine'
     }
-    leg_title = f'{leg_title_labels[level_label]} level assignments'
-    if legend_cutoff > 0:
-        leg_title += f'\nwith observed proportion over {legend_cutoff}'
+    leg_title = f'{leg_title_labels[level_label]} NN level mosquito species assignments'
+    if args.legend_cutoff > 0:
+        leg_title += f'\nwith observed proportion over {args.legend_cutoff}'
     # reverse species legend order to match barplot order
     axs[0].legend(
         flt_handles[::-1], flt_labels[::-1], 
         title=leg_title,
-        loc='upper left',
         alignment='left',
+        loc='upper left',
         bbox_to_anchor=(1,0.1), 
         fontsize=10
         )
     # adding title in post - handling margins by savefig's bbox_inches='tight' at this point
-    axs[0].set_title(f'NN assignment {level_label} level for run {run_id}', fontsize=20)
+    axs[0].set_title(f'NN assignment {level_label} level for {run_id}', fontsize=20)
 
     return fig, axs
 
@@ -638,10 +647,7 @@ def nn(args):
     logging.info('ANOSPP NN data import started')
 
     hap_df = prep_hap(args.haplotypes)
-    run_id, samples_df = prep_samples(args.manifest)
-    stats_df = prep_stats(args.stats)
-
-    comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
+    run_id, comb_stats_df = prep_comb_stats(args.stats)
     
     logging.info(f'starting NN assignment for {comb_stats_df.sample_id.nunique()} samples in run {run_id}')
     mosq_hap_df = prep_mosquito_haps(
@@ -651,16 +657,12 @@ def nn(args):
         )
 
     ref_hap_df, allele_freqs, true_multi_targets, colors, version_name = prep_reference_index(
-        args.reference_version, 
-        path_to_refversion=args.path_to_refversion
+        args.reference_path
         )
         
-    non_error_hap_fn = f'{args.outdir}/non_error_haplotypes.tsv'
+    nn_hap_fn = f'{args.outdir}/nn_hap_summary.tsv'
     nndict_fn = f'{args.outdir}/nn_dist_to_ref.tsv'
-    if args.resume and os.path.isfile(non_error_hap_fn) and os.path.isfile(nndict_fn):
-        logging.warning(f'reading non error haplotype data from {non_error_hap_fn}')
-        non_error_hap_df = pd.read_csv(non_error_hap_fn, sep='\t')
-
+    if args.resume and os.path.isfile(nndict_fn):
         logging.warning(f'reading nndict from {nndict_fn}')
         nndict = {}
         with open(nndict_fn) as f:
@@ -669,33 +671,31 @@ def nn(args):
                 ll = line.strip().split('\t')
                 if len(ll) == 3:
                     nndict[ll[0]] = ([int(i) for i in ll[1].split('|')], float(ll[2]))
+        
+    if args.resume and os.path.isfile(nn_hap_fn):
+        logging.warning(f'reading annotated haplotype data from {nn_hap_fn}')
+        non_error_hap_df = pd.read_csv(nn_hap_fn, sep='\t')
     else:
-        kmers = construct_unique_kmer_table(mosq_hap_df, args.kmer_length)
-        ref_kmers = construct_unique_kmer_table(ref_hap_df, args.kmer_length)
+        kmers = construct_unique_kmer_table(mosq_hap_df, args.kmer_length, source='samples')
+        ref_kmers = construct_unique_kmer_table(ref_hap_df, args.kmer_length, source=version_name)
 
         error_seqs = identify_error_seqs(mosq_hap_df, kmers, args.kmer_length, args.n_error_snps)
         non_error_hap_df = mosq_hap_df[~mosq_hap_df.seqid.isin(error_seqs)]
         non_error_hap_df = recompute_haplotype_coverage(non_error_hap_df)
-        non_error_hap_df[[
-            'sample_id',
-            'target',
-            'consensus',
-            'reads',
-            'seqid',
-            'total_reads',
-            'reads_fraction',
-            'nalleles'
-        ]].to_csv(non_error_hap_fn, index=False, sep='\t')
-
-        nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
-        nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
-        nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
-        nn_df.index.name = 'seqid'
-        nn_df[['nn_id', 'nn_dist']].to_csv(
-            nndict_fn, 
-            sep='\t',
-            index=True
-            )
+        
+        if not args.resume or not os.path.isfile(nndict_fn):
+            nndict = find_nn_unique_haps(non_error_hap_df, kmers, ref_hap_df, ref_kmers)
+            nn_df = pd.DataFrame.from_dict(nndict, orient='index', columns=['nn_id_array', 'nn_dist'])
+            nn_df['nn_id'] = ['|'.join(map(str, l)) for l in nn_df.nn_id_array]
+            nn_df.index.name = 'seqid'
+            nn_df[['nn_id', 'nn_dist']].to_csv(
+                nndict_fn, 
+                sep='\t',
+                index=True
+                )
+        nn_hap_df = add_nn_to_haplotypes(non_error_hap_df, nndict, ref_hap_df)
+        logging.info(f'writing annotated haplotypes to {nn_hap_fn}')
+        nn_hap_df.to_csv(nn_hap_fn, index=False, sep='\t')
 
     nn_assignment_fn = f'{args.outdir}/nn_assignment.tsv'
     if args.resume and os.path.isfile(nn_assignment_fn):
@@ -725,14 +725,10 @@ def nn(args):
             test_samples,
             results_dfs, 
             true_multi_targets, 
-            nn_asgn_threshold=args.nn_assignment_threshold,
-            rc_med_threshold=args.medium_contamination_read_count_threshold,
-            ma_med_threshold=args.medium_contamination_multi_allelic_threshold,
-            ma_hi_threshold=args.high_contamination_multi_allelic_threshold,
-            ma_vh_threshold=args.very_high_contamination_multi_allelic_threshold
+            nn_asgn_threshold=args.nn_assignment_threshold
         )
 
-        comb_stats_df['nn_ref'] = args.reference_version
+        comb_stats_df['nn_ref'] = version_name
         logging.info(f'writing assignment results to {nn_assignment_fn}')
         comb_stats_df[[
             'sample_id',
@@ -744,7 +740,6 @@ def nn(args):
             'nn_coarse',
             'nn_int',
             'nn_fine',
-            'contamination_risk',
             'nn_species_call',
             'nn_call_method',
             'nn_ref'
@@ -757,6 +752,17 @@ def nn(args):
         fn.write(summary_text)
 
     if not args.no_plotting:
+
+        fig, _, _, _ = plot_het_cov(non_error_hap_df, title='Mosquito filtered', run_id=run_id)
+        fig.savefig(f'{args.outdir}/het_cov.png')
+
+        if args.plasm_assignment is not None and args.plasm_colors is not None:
+            plasm_df = pd.read_csv(args.plasm_assignment, sep='\t')
+            plasm_colors = pd.read_csv(args.plasm_colors).set_index('species')['color']
+        else:
+            plasm_df = None
+            plasm_colors = None
+        
         for level in ['coarse', 'int', 'fine']:
             fig_fn = f'{args.outdir}/{level}_assignment.png'
             if args.resume and os.path.isfile(fig_fn):
@@ -766,13 +772,11 @@ def nn(args):
                     comb_stats_df, 
                     results_dfs[level], 
                     level, 
-                    colors[level], 
-                    args.nn_assignment_threshold,
+                    colors[level],
                     run_id,
-                    args.plasm_assignment,
-                    args.plasm_colors,
-                    args.medium_contamination_read_count_threshold,
-                    args.legend_cutoff
+                    plasm_df,
+                    plasm_colors,
+                    args
                     )
                 fig.savefig(fig_fn, bbox_inches='tight')
 
@@ -782,16 +786,12 @@ def nn(args):
 def main():
     
     parser = argparse.ArgumentParser('NN assignment for ANOSPP sequencing data')
-    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
-    parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
-    parser.add_argument('-s', '--stats', help='DADA2 stats tsv file', required=True)
+    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file generatd by prep', required=True)
+    parser.add_argument('-s', '--stats', help='Comb stats tsv file generated by prep', required=True)
+    parser.add_argument('-r', '--reference_path', 
+                        help='Path to reference index directory, expected to end with e.g. nnv2 ',
+                        required=True)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: nn', default='nn')
-    parser.add_argument('-r', '--reference_version', 
-                        help='Reference index version - currently a directory name. Default: nnv1',
-                        default='nnv1')
-    parser.add_argument('-p', '--path_to_refversion',
-                        help='Path to reference index version. Default: ref_databases',
-                        default='ref_databases')
     parser.add_argument('--no_plotting', help='Do not generate plots. Default: False',
                         action='store_true',
                         default=False)
@@ -806,21 +806,12 @@ def main():
     parser.add_argument('--hap_reads_fraction_threshold',
                         help='Minimum fraction of reads for supported haplotypes. Default: 0.1',
                         default=0.1, type=float)
-    parser.add_argument('--medium_contamination_read_count_threshold',
-                        help='Samples with fewer than this number of reads get medium contamination risk. Default: 1000',
+    parser.add_argument('--locov_rc',
+                        help='Samples with fewer than this number of reads are marked as low coverage in plot. Default: 1000',
                         default=1000, type=int)
-    parser.add_argument('--medium_contamination_multi_allelic_threshold',
-                        help='Samples with more than this number of multiallelic targets get medium contamination risk. Default: 0',
-                        default=0, type=int)
-    parser.add_argument('--high_contamination_multi_allelic_threshold',
-                        help='Samples with more than this number of multiallelic targets get high contamination risk. Default: 2',
-                        default=2, type=int)
-    parser.add_argument('--very_high_contamination_multi_allelic_threshold',
-                        help='Samples with more than this number of multiallelic targets get very high contamination risk. Default: 4',
-                        default=4, type=int)
     parser.add_argument('--nn_assignment_threshold',
-                        help='Required fraction for calling assignment. Default: 0.8',
-                        default=0.8, type=float)
+                        help='Required fraction for calling assignment. Default: 0.7 (changed in nnv2)',
+                        default=0.7, type=float)
     parser.add_argument('--n_error_snps',
                         help='Maximum number of snps for a multi-allelic sequence to be considered a sequencing or PCR error. Default: 2',
                         default=2, type=int)

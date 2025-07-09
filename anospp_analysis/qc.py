@@ -1,35 +1,14 @@
-import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from collections import OrderedDict
+from scipy.optimize import curve_fit
+import math
 import os
 import argparse
 
 from anospp_analysis.util import *
-
-def write_qc_stats(comb_stats_df, out_fn):
-
-    comb_stats_df[[
-        'sample_id',
-        'total_reads',
-        'readthrough_pass_reads',
-        'dada2_input_reads',
-        'dada2_filtered_reads',
-        'dada2_denoised_reads',
-        'dada2_merged_reads',
-        'dada2_nonchim_reads',
-        'target_reads',
-        'overall_filter_rate',
-        'unassigned_asvs',
-        'targets_recovered',
-        'raw_mosq_targets_recovered',
-        'raw_multiallelic_mosq_targets',
-        'raw_mosq_reads',
-        'p1_reads',
-        'p2_reads'
-    ]].to_csv(out_fn, sep='\t', index=False)
 
 def plot_target_balance(hap_df, run_id):
 
@@ -60,9 +39,12 @@ def plot_target_balance(hap_df, run_id):
 
     return fig, ax
 
-def plot_allele_balance(hap_df, run_id):
+def plot_allele_balance(hap_df, run_id, anospp=True):
     
     logging.info('plotting allele balance and coverage')
+
+    if anospp:
+        hap_df = hap_df[hap_df.target.isin(MOSQ_TARGETS)]
 
     is_het = (hap_df.reads_fraction < 1)
     het_frac = hap_df[is_het].reads_fraction
@@ -78,7 +60,8 @@ def plot_allele_balance(hap_df, run_id):
     het_plot.ax_joint.axhline(1, c='silver', alpha=.5)
     het_plot.ax_joint.axvline(0.1, c='silver', alpha=.5)
     # funky title setting
-    het_plot.fig.suptitle(f'Allele fractions and supporting read coverage for run {run_id}')
+    extra = ' in mosquito targets' if anospp else ''
+    het_plot.fig.suptitle(f'Allele fractions and coverage{extra} for run {run_id}')
     het_plot.fig.tight_layout()
     het_plot.fig.subplots_adjust(top=0.95) # Reduce plot to make room
     
@@ -100,50 +83,6 @@ def plot_well_balance(comb_stats_df, run_id):
     ax.tick_params(axis='x', rotation=90)
 
     return fig, ax
-
-def plot_sample_target_heatmap(hap_df, samples_df, col, run_id):
-
-    logging.info(f'plotting sample-target heatmap for {col}')
-
-    if col not in ('total_reads', 'nalleles'):
-        raise ValueError(f'sample target heatmap for {col} not implemented')
-
-    st_df = hap_df.pivot_table(
-        values=col, 
-        index='target', 
-        columns='sample_id', 
-        aggfunc='max',
-        observed=False
-        ).fillna(0)
-    
-    if col == 'total_reads':
-        st_df = np.log10(st_df.astype(float).replace(0, .1))
-    
-    plates = samples_df['plate_id'].unique()
-    nplates = len(plates)
-
-    fig, axs = plt.subplots(
-        nplates, 1,
-        figsize=(22, 15 * nplates),
-        constrained_layout=True
-        )
-    fig.suptitle(f'Sample-target heatmap for {col} in run {run_id}', fontsize=20)
-    for plate, ax in zip(plates, axs):
-        plate_samples = samples_df.loc[samples_df['plate_id'] == plate, 'sample_id']
-        plot_df = st_df.reindex(columns=plate_samples, fill_value=0)
-        max_int = plot_df.max().max().astype(int) + 1
-        sns.heatmap(
-            plot_df, 
-            cmap='coolwarm', 
-            center=2, 
-            linewidths=.5, 
-            linecolor='silver', 
-            ax=ax, 
-            cbar_kws={'ticks':range(max_int)}
-            )
-        ax.set_title(plate)
-
-    return fig, axs
 
 def plot_sample_filtering(comb_stats_df, run_id, anospp=True):
     
@@ -231,7 +170,7 @@ def plot_plate_stats(comb_stats_df, run_id, lims_plate=False):
     
     sns.stripplot(
         data=comb_stats_df,
-        y='targets_recovered',
+        y='raw_mosq_targets_recovered',
         x=plate_col,
         hue=plate_col,
         alpha=.3,
@@ -298,11 +237,12 @@ def plot_sample_success(comb_stats_df, run_id, anospp=True):
 
     logging.info('plotting sample success')
 
-    ycol = 'raw_mosq_targets_recovered' if anospp else 'targets_recovered'
+    ycol = 'raw_mosq_reads' if anospp else 'target_reads'
+    tgtcol = 'raw_mosq_targets_recovered' if anospp else 'targets_recovered'
 
     fig, axs = plt.subplots(1, 2, figsize=(12,6), constrained_layout=True)
     fig.suptitle(f'Key stats covariation for run {run_id}')
-    for xcol, ax in zip(('raw_mosq_reads', 'overall_filter_rate'), axs):
+    for xcol, ax in zip((tgtcol, 'overall_filter_rate'), axs):
         sns.scatterplot(
             data=comb_stats_df,
             x=xcol,
@@ -311,14 +251,15 @@ def plot_sample_success(comb_stats_df, run_id, anospp=True):
             alpha=.5, 
             ax=ax
             )
-        ax.set_ylim(bottom=0)
-        if anospp:
-            ax.axhline(10, c='silver', alpha=.5)
-            ax.axhline(50, c='silver', alpha=.5)
-            ax.set_ylim(top=62)
-    axs[0].set_xscale('log')
-    axs[0].set_xlim(left=1)
-    axs[0].axvline(1000, c='silver', alpha=.5)
+        ax.set_yscale('log')
+        ax.set_ylim(bottom=1)
+        ax.axhline(1000, c='silver', alpha=.5)
+    
+    axs[0].set_xlim(left=0)
+    if anospp:
+        axs[0].axvline(10, c='silver', alpha=.5)
+        axs[0].axvline(50, c='silver', alpha=.5)
+        axs[0].set_xlim(right=62)
     axs[1].axvline(.5, c='silver', alpha=.5)
     axs[1].set_xlim(left=0, right=1)
     axs[1].get_legend().remove()
@@ -414,6 +355,106 @@ def plot_plate_heatmap(comb_stats_df, col, run_id, lims_plate=False, **heatmap_k
 
     return fig, axs
 
+def plot_het_cov(hap_df, title='Total', run_id=None):
+
+    logging.info('plotting heterozygosity vs coverage')
+
+    nalleles_df = hap_df.pivot_table(
+        index='sample_id',
+        columns='target',
+        values='nalleles',
+        aggfunc='max',
+        fill_value=0,
+        observed=False)
+    het_df = pd.DataFrame({
+        'reads':hap_df.groupby(['sample_id'])['reads'].sum(),
+        'targets':hap_df.groupby(['sample_id'])['target'].nunique(),
+        'het_targets':(nalleles_df > 1).sum(axis=1)
+    })
+    het_df['het_rate'] = het_df['het_targets'] / het_df['targets']
+
+    def logistic(x, L, k, x0):
+        """
+        Logistic function that can plateau:
+        L = maximum value (plateau)
+        k = growth rate
+        x0 = the x-value of the sigmoid's midpoint
+        """
+        return L / (1 + np.exp(-k * (x - x0)))
+    # fit the logistic curve to the data using curve_fit
+    popt, _ = curve_fit(logistic, het_df.reads.fillna(-1), het_df.het_rate, p0=[.4, 0.0004, 3000])
+    # popt contains the optimal parameters L, k, x0
+    L, k, x0 = popt
+    # set graph limit to nearest 1000
+    xmax=math.ceil(float(het_df.reads.max()) / 1000) * 1000
+    ymax=np.max(het_df.het_rate)
+    x = np.arange(xmax) * 100
+    y = logistic(x, L, k, x0)
+    # cutoff values
+    cutoffs = {}
+    # for r in (.90,.95,.99):
+    # find the index of 0.9  of limit of curve-fitted line and use the same index to find x value
+    y_index=len(list(filter(lambda x: float(x) < float(L) * 0.9, list(y))))
+    # transform into read counts
+    x_threshold = x[y_index]
+
+    fig, ax = plt.subplots(1, 1, figsize=(6,4))
+
+    ax.scatter(het_df.reads, het_df.het_rate, alpha=.1)
+    ax.plot(x, y, c='r', label=f'Logistic het, max {L:.3f}')
+    ax.vlines(x_threshold, 0, 0.95 * ymax, color='k', ls=':', label=f'Raw reads at 90% het: {x_threshold}')
+    ax.set_xlim(-500,xmax)
+    # ax.set_xscale('log')
+    ax.legend()
+    ax.set_ylabel('heterozygosity rate')
+    ax.set_xlabel('reads')
+    title = f'{title} reads and heterozygosity'
+    if run_id is not None:
+        title += f' for run {run_id}'
+    ax.set_title(title)
+
+    return fig, ax, L, x_threshold
+
+def plot_cov(comb_stats_df, run_id):
+
+    logging.info('plotting coverage')
+
+    fig, axs = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
+
+    for col, ax in zip(['total_reads', 'raw_mosq_reads'], axs):
+
+        data = comb_stats_df[col]
+        
+        # Calculate statistics
+        mean_val = data.mean()
+        median_val = data.median()
+        quantiles = data.quantile([0.25, 0.75, 0.95])
+        q25, q75, q95 = quantiles[0.25], quantiles[0.75], quantiles[0.95]
+        
+        # Alt plotting options
+        # ax.set_xscale('log')
+        # sns.kdeplot(x=data.replace(0,0.5), ax=ax)
+        # sns.boxenplot(x=data.replace(0,0.5), ax=ax, alpha=.1)
+        # sns.stripplot(x=data.replace(0,0.5), jitter=False, ax=ax)
+
+        # Plot histogram
+        ax.hist(data, bins=20, color='skyblue', edgecolor='black', alpha=0.7)
+        
+        # Add horizontal lines for mean, median, and quantiles
+        ax.axvline(mean_val, color='red', linestyle='--', linewidth=1.5, label=f'Mean: {mean_val:.0f}')
+        ax.axvline(median_val, color='green', linestyle='-', linewidth=1.5, label=f'Median: {median_val:.0f}')
+        ax.axvline(q25, color='purple', linestyle='-.', linewidth=1.5, label=f'25% Quantile: {q25:.0f}')
+        ax.axvline(q75, color='orange', linestyle='-.', linewidth=1.5, label=f'75% Quantile: {q75:.0f}')
+        ax.axvline(q95, color='blue', linestyle='-.', linewidth=1.5, label=f'95% Quantile: {q95:.0f}')
+        
+        # Add labels and legend
+        ax.set_title(f'Run {run_id} {col}')
+        ax.set_xlabel(col)
+        ax.set_ylabel('Frequency')
+        ax.legend()
+
+    return fig, axs
+
 def qc(args):
 
     setup_logging(verbose=args.verbose)
@@ -422,15 +463,9 @@ def qc(args):
     
     logging.info('ANOSPP QC data import')
 
-    run_id, samples_df = prep_samples(args.manifest)
-    stats_df = prep_stats(args.stats)
     hap_df = prep_hap(args.haplotypes)
     
-    comb_stats_df = combine_stats(stats_df, hap_df, samples_df)
-
-    logging.info('saving sample QC stats')
-
-    write_qc_stats(comb_stats_df, f'{args.outdir}/sample_qc_stats.tsv')
+    run_id, comb_stats_df = prep_comb_stats(args.stats)
     
     logging.info('plotting QC')
     
@@ -441,25 +476,30 @@ def qc(args):
         anospp = False
         logging.warning('non-ANOSPP targets detected, plotting only generic QC plots')
 
+    fig, _ = plot_cov(comb_stats_df, run_id)
+    fig.savefig(f'{args.outdir}/coverage.png')
+
     fig, _ = plot_target_balance(hap_df, run_id)
     fig.savefig(f'{args.outdir}/target_balance.png')
 
-    fig = plot_allele_balance(hap_df, run_id)
+    # allele balance plotted for mosuqito targets only
+    fig = plot_allele_balance(hap_df, run_id, anospp=anospp)
     fig.savefig(f'{args.outdir}/allele_balance.png')
 
     fig, _ = plot_well_balance(comb_stats_df, run_id)
     fig.savefig(f'{args.outdir}/well_balance.png')
 
-    # # deactivated as unused and too big plot
-    # for col in ('nalleles', 'total_reads'):
-    #     fig, _ = plot_sample_target_heatmap(hap_df, samples_df, col, run_id)
-    #     fig.savefig(f'{args.outdir}/sample_target_{col}.png')
-
-    fig, _ = plot_sample_filtering(comb_stats_df, run_id, anospp)
+    fig, _ = plot_sample_filtering(comb_stats_df, run_id, anospp=anospp)
     fig.savefig(f'{args.outdir}/filter_per_sample.png')
 
     # set of plots tweaked for anospp only 
     if anospp:
+        # disabled as logistic fit does not work prior to filtering, 
+        # post-filtering plot is generated as part of NN script
+        # mosq_hap_df = hap_df[hap_df['target'].isin(MOSQ_TARGETS)]
+        # fig, _, _, _ = plot_het_cov(mosq_hap_df, title='Raw mosquito', run_id=run_id)
+        # fig.savefig(f'{args.outdir}/het_cov.png')
+
         fig, _ = plot_plate_stats(comb_stats_df, run_id, lims_plate=False)
         fig.savefig(f'{args.outdir}/plate_stats.png')
 
@@ -474,6 +514,9 @@ def qc(args):
 
         fig, _ = plot_plasm_balance(comb_stats_df, run_id)
         fig.savefig(f'{args.outdir}/plasm_balance.png')
+    else:
+        fig, _, _, _ = plot_het_cov(hap_df, title='Total', run_id=run_id)
+        fig.savefig(f'{args.outdir}/het_cov.png')
 
     if anospp:
         heatmap_cols = [
@@ -546,10 +589,11 @@ def qc(args):
 def main():
     
     parser = argparse.ArgumentParser("QC for ANOSPP sequencing data")
-    parser.add_argument('-a', '--haplotypes', help='Haplotypes tsv file', required=True)
-    parser.add_argument('-m', '--manifest', help='Samples manifest tsv file', required=True)
+    parser.add_argument('-a', '--haplotypes', 
+                        help='Haplotypes tsv file generated by prep script', 
+                        required=True)
     parser.add_argument('-s', '--stats', 
-                        help='overall_summary.txt file from ampliseq pipeline or DADA2 stats tsv file',
+                        help='Stats tsv file generated by prep script',
                         required=True)
     parser.add_argument('-o', '--outdir', help='Output directory. Default: qc', default='qc')
     parser.add_argument('-v', '--verbose', 

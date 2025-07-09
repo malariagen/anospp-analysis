@@ -6,7 +6,7 @@ ANOSPP is the multiplexed amplicon sequencing assay for Anopheles mosquito speci
 
 ## Installation
 
-For released version
+For latest released version
 
 ```bash
 conda install -c bioconda anospp-analysis
@@ -23,6 +23,7 @@ Key analysis steps are implemented as standalone scripts:
 - `anospp-plasm` blasts Plasmodium sequences against reference dataset to determine species and infer sample infection status
 - `anospp-nn` compares k-mer profiles of mosquito targets against a reference dataset and provides probabilistic species calls
 - `anospp-vae` provides finer scale species prediction for An. gambiae complex with VAE projection
+- `anospp-agg` combines all results into a single table
 
 ## Development
 
@@ -60,7 +61,6 @@ $ python
 ['P1', 'P2']
 ```
 
-TODO Automated testing & CI
 
 ### Adding Python deps
 
@@ -90,13 +90,13 @@ Introducing non-python dependencies should be done via conda: edit `environment.
 then re-create the conda environment and poetry deps:
 
 ```bash
-mamba env create -f environment.yml
+conda env create -f environment.yml
 conda activate anospp_analysis
 poetry install
 ```
 
-Changes in conda environment might also introduce changes to the python installation,
-in which case one should update poetry lock file
+If changes in conda environment introduce changes to the python installation,
+one should update poetry lock file
 
 ```bash
 poetry lock
